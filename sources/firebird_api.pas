@@ -1,6 +1,7 @@
 ﻿unit firebird_api;
 
-{$I .\sources\general.inc}
+{$INCLUDE .\sources\general.inc}
+// {$OBJECTCHECKS OFF}
 
 interface
 
@@ -222,7 +223,7 @@ type
   IConfigManager_getDefaultSecurityDbPtr = function(this: IConfigManager): PAnsiChar; cdecl;
   IEventCallback_eventCallbackFunctionPtr = procedure(this: IEventCallback; length: Cardinal; events: BytePtr); cdecl;
   IBlob_getInfoPtr = procedure(this: IBlob; status: IStatus; itemsLength: Cardinal; items: BytePtr; bufferLength: Cardinal; buffer: BytePtr); cdecl;
-  IBlob_getSegmentPtr = function(this: IBlob; status: IStatus; bufferLength: Cardinal; buffer: Pointer; segmentLength: CardinalPtr): Integer; cdecl;
+  IBlob_getSegmentPtr = function(this: IBlob; status: IStatus; bufferLength: Cardinal; buffer: Pointer; var segmentLength: Cardinal): Integer; cdecl;
   IBlob_putSegmentPtr = procedure(this: IBlob; status: IStatus; length: Cardinal; buffer: Pointer); cdecl;
   IBlob_cancelPtr = procedure(this: IBlob; status: IStatus); cdecl;
   IBlob_closePtr = procedure(this: IBlob; status: IStatus); cdecl;
@@ -1204,7 +1205,7 @@ type
     version = 3;
 
     procedure getInfo(status: IStatus; itemsLength: Cardinal; items: BytePtr; bufferLength: Cardinal; buffer: BytePtr);
-    function getSegment(status: IStatus; bufferLength: Cardinal; buffer: Pointer; segmentLength: CardinalPtr): Integer;
+    function getSegment(status: IStatus; bufferLength: Cardinal; buffer: Pointer; var segmentLength: Cardinal): Integer;
     procedure putSegment(status: IStatus; length: Cardinal; buffer: Pointer);
     procedure cancel(status: IStatus);
     procedure close(status: IStatus);
@@ -5597,10 +5598,11 @@ begin
   FbException.checkException(status);
 end;
 
-function IBlob.getSegment(status: IStatus; bufferLength: Cardinal; buffer: Pointer; segmentLength: CardinalPtr): Integer;
+function IBlob.getSegment(status: IStatus; bufferLength: Cardinal; buffer: Pointer; var segmentLength: Cardinal): Integer;
 begin
   Result := BlobVTable(vTable).getSegment(Self, status, bufferLength, buffer, segmentLength);
-  FbException.checkException(status);
+//  {$Message 'KVO. лишняя провека, так как STATE_ERRORS = RESULT_SEGMENT'}
+//  FbException.checkException(status);
 end;
 
 procedure IBlob.putSegment(status: IStatus; length: Cardinal; buffer: Pointer);
@@ -13963,7 +13965,11 @@ end;
 class procedure FbException.checkException(status: IStatus);
 begin
   if ((status.getState and status.STATE_ERRORS) <> 0) then
-    raise FbException.create(status);
+    if (status.GetErrors^ <> 1) then
+      raise FbException.create(status);
+
+//  if ((status.getState and status.STATE_ERRORS) <> 0) then
+//    raise FbException.create(status);
 end;
 
 class procedure FbException.catchException(status: IStatus; e: Exception);
@@ -14864,3 +14870,4 @@ IUdrTriggerFactoryImpl_vTable.Destroy;
 IUdrPluginImpl_vTable.Destroy;
 
 end.
+

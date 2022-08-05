@@ -1,6 +1,6 @@
 ﻿unit firebird_factories;
 
-{$I .\sources\general.inc}
+{$INCLUDE .\sources\general.inc}
 
 interface
 
@@ -43,6 +43,15 @@ type
 
 type
   TExternalFunctionBase = class abstract(IExternalFunctionImpl)
+  public type
+    TClass = class of TExternalFunctionBase;
+  private
+    FRoutineMetadata: TRoutineMetadata;
+  protected
+    class function TypeToSqlType(AType: Pointer): ESqlType;
+    class procedure ParamSet(AStatus: IStatus; AMeta: IMetadataBuilder; AIndex: NativeInt; AType: ESqlType);
+    class procedure doSetup(const ASetup: RSetupParams); virtual;
+    class procedure doNewItem(AStatus: IStatus; AContext: IExternalContext; AMetadata: TRoutineMetadata); virtual;
   public
 {$IFDEF NODEF}{$REGION 'Описание'}{$ENDIF}
     /// <summary>
@@ -61,12 +70,17 @@ type
 {$IFDEF NODEF}{$ENDREGION}{$ENDIF}
     procedure getCharSet(AStatus: IStatus; AContext: IExternalContext; AName: PAnsiChar; ANameSize: Cardinal); override;
   public
-    constructor Create;
+    constructor Create(AParent: IUdrFunctionFactoryImpl); overload;
+    constructor Create(AParent: IUdrFunctionFactoryImpl; AStatus: IStatus; AMetadata: IRoutineMetadata); overload;
+    constructor Create(AParent: IUdrFunctionFactoryImpl; AStatus: IStatus; AMetadata: TRoutineMetadata); overload;
+
     destructor Destroy; override;
   end;
 
 type
   TExternalProcedureBase = class abstract(IExternalProcedureImpl)
+  public type
+    TClass = class of TExternalProcedureBase;
   public
 {$IFDEF NODEF}{$REGION 'Описание'}{$ENDIF}
     /// <summary>
@@ -90,39 +104,30 @@ type
   end;
 
 type
-  TFactoryFunctionUniversal = class(IUdrFunctionFactoryImpl)
-  protected type
-    TFunctionAnonymous = class(TExternalFunctionBase)
-    private
-      FRoutineMetadata: TRoutineMetadata;
-      FParent         : TFactoryFunctionUniversal;
-    public
-      constructor Create(AParent: TFactoryFunctionUniversal; AStatus: IStatus; AMetadata: IRoutineMetadata); overload;
-      constructor Create(AParent: TFactoryFunctionUniversal; AStatus: IStatus; AMetadata: TRoutineMetadata); overload;
-    public
-      procedure execute(AStatus: IStatus; AContext: IExternalContext; AInMsg, AOutMsg: Pointer); override;
-    public
-      destructor Destroy; override;
-    end;
+  TFactoryFunction = class(IUdrFunctionFactoryImpl)
+  protected
+    FInstanceClass: TExternalFunctionBase.TClass;
   public
     procedure dispose; override;
   public
     procedure setup(AStatus: IStatus; AContext: IExternalContext; AMetadata: IRoutineMetadata; AInput, AOutput: IMetadataBuilder); override;
   public
     function newItem(AStatus: IStatus; AContext: IExternalContext; AMetadata: IRoutineMetadata): IExternalFunction; override;
-  protected
-    procedure doNewItem(AStatus: IStatus; AContext: IExternalContext; AMetadata: TRoutineMetadata); virtual;
-  protected
-    procedure doSetup(const ASetup: RSetupParams); virtual;
+  public
+    constructor Create(AInstanceClass: TExternalFunctionBase.TClass);
+    destructor Destroy; override;
+  end;
+
+type
+  TFunction = class abstract(TExternalFunctionBase)
   protected
     procedure BeforeExecute(AStatus: IStatus; AInput, AOutput: TMessagesData); virtual;
     function doExecute(const AParams: RExecuteParams): Boolean; virtual;
     procedure AfterExecute(AStatus: IStatus; AInput, AOutput: TMessagesData); virtual;
   public
-    function TypeToSqlType(AType: Pointer): ESqlType;
-    procedure ParamSet(AStatus: IStatus; AMeta: IMetadataBuilder; AIndex: NativeInt; AType: ESqlType);
+    procedure execute(AStatus: IStatus; AContext: IExternalContext; AInMsg: Pointer; AOutMsg: Pointer); override; final;
   public
-    destructor Destroy; override;
+    class function Factory: TFactoryFunction; virtual;
   end;
 
   TFactoryProcedureUniversal = class(IUdrProcedureFactoryImpl)
@@ -164,15 +169,28 @@ uses
 
 { TExternalFunctionBase }
 
-constructor TExternalFunctionBase.Create;
+constructor TExternalFunctionBase.Create(AParent: IUdrFunctionFactoryImpl);
 begin
   inherited Create;
-  // RLibraryHeapManager.Add(Self);
+  RLibraryHeapManager.Add(Self, AParent);
+end;
+
+constructor TExternalFunctionBase.Create(AParent: IUdrFunctionFactoryImpl; AStatus: IStatus; AMetadata: TRoutineMetadata);
+begin
+  Create(AParent);
+  FRoutineMetadata := AMetadata;
+end;
+
+constructor TExternalFunctionBase.Create(AParent: IUdrFunctionFactoryImpl; AStatus: IStatus; AMetadata: IRoutineMetadata);
+begin
+  Create(AParent, AStatus, TRoutineMetadata.Create(AStatus, AMetadata));
 end;
 
 destructor TExternalFunctionBase.Destroy;
 begin
-  // RLibraryHeapManager.Remove(Self);
+  FRoutineMetadata.Free;
+  RLibraryHeapManager.ClearDependentFromParent(Self);
+  RLibraryHeapManager.Remove(Self);
   inherited;
 end;
 
@@ -181,121 +199,29 @@ begin
   Destroy
 end;
 
+class procedure TExternalFunctionBase.doNewItem(AStatus: IStatus; AContext: IExternalContext; AMetadata: TRoutineMetadata);
+begin
+  // virtual
+end;
+
+class procedure TExternalFunctionBase.doSetup(const ASetup: RSetupParams);
+begin
+  // virtual
+end;
+
 procedure TExternalFunctionBase.getCharSet(AStatus: IStatus; AContext: IExternalContext; AName: PAnsiChar; ANameSize: Cardinal);
 begin
   // virtual
 end;
 
-{ TExternalProcedureBase }
-
-constructor TExternalProcedureBase.Create;
-begin
-  inherited Create;
-  // RLibraryHeapManager.Add(Self);
-end;
-
-destructor TExternalProcedureBase.Destroy;
-begin
-  // RLibraryHeapManager.Remove(Self);
-  inherited;
-end;
-
-procedure TExternalProcedureBase.dispose;
-begin
-  Destroy
-end;
-
-procedure TExternalProcedureBase.getCharSet(AStatus: IStatus; AContext: IExternalContext; AName: PAnsiChar; ANameSize: Cardinal);
-begin
-  // virtual
-end;
-
-{ TFactoryFunctionUniversal }
-
-procedure TFactoryFunctionUniversal.AfterExecute(AStatus: IStatus; AInput, AOutput: TMessagesData);
-begin
-  // virtual
-end;
-
-procedure TFactoryFunctionUniversal.BeforeExecute(AStatus: IStatus; AInput, AOutput: TMessagesData);
-begin
-  // virtual
-end;
-
-destructor TFactoryFunctionUniversal.Destroy;
-begin
-  RLibraryHeapManager.ClearDependentFromParent(Self);
-  inherited;
-end;
-
-procedure TFactoryFunctionUniversal.dispose;
-begin
-  Destroy
-end;
-
-function TFactoryFunctionUniversal.doExecute(const AParams: RExecuteParams): Boolean;
-begin
-  Result := False
-end;
-
-procedure TFactoryFunctionUniversal.doNewItem(AStatus: IStatus; AContext: IExternalContext; AMetadata: TRoutineMetadata);
-begin
-  // virtual
-end;
-
-procedure TFactoryFunctionUniversal.doSetup(const ASetup: RSetupParams);
-begin
-  // virtual
-end;
-
-function TFactoryFunctionUniversal.newItem(AStatus: IStatus; AContext: IExternalContext; AMetadata: IRoutineMetadata): IExternalFunction;
-var
-  tmpMetadata: TRoutineMetadata;
-begin
-  try
-    tmpMetadata := TRoutineMetadata.Create(AStatus, AMetadata);
-    try
-      doNewItem(AStatus, AContext, tmpMetadata);
-      Result := TFunctionAnonymous.Create(Self, AStatus, tmpMetadata);
-      tmpMetadata := nil;
-    finally
-      tmpMetadata.Free
-    end;
-  except
-    on E: Exception do
-    begin
-      FbException.catchException(AStatus, E);
-      Result := nil;
-    end;
-  end
-end;
-
-procedure TFactoryFunctionUniversal.ParamSet(AStatus: IStatus; AMeta: IMetadataBuilder; AIndex: NativeInt; AType: ESqlType);
+class procedure TExternalFunctionBase.ParamSet(AStatus: IStatus; AMeta: IMetadataBuilder; AIndex: NativeInt; AType: ESqlType);
 begin
   AMeta.setType(AStatus, AIndex, Cardinal(AType) + 1);
   if AType = SQL_VARYING then
     AMeta.setCharSet(AStatus, AIndex, Cardinal(CS_UTF8));
 end;
 
-procedure TFactoryFunctionUniversal.setup(AStatus: IStatus; AContext: IExternalContext; AMetadata: IRoutineMetadata;
-  AInput, AOutput: IMetadataBuilder);
-var
-  tmpMetadata: TRoutineMetadata;
-begin
-  try
-    tmpMetadata := TRoutineMetadata.Create(AStatus, AMetadata);
-    try
-      doSetup(RSetupParams.Create(AStatus, tmpMetadata, AInput, AOutput, Self));
-    finally
-      tmpMetadata.Destroy
-    end;
-  except
-    on E: Exception do
-      FbException.catchException(AStatus, E)
-  end;
-end;
-
-function TFactoryFunctionUniversal.TypeToSqlType(AType: Pointer): ESqlType;
+class function TExternalFunctionBase.TypeToSqlType(AType: Pointer): ESqlType;
 begin
   if (AType = TypeInfo(Int16)) or (AType = TypeInfo(UInt16)) or (AType = TypeInfo(SmallInt)) or (AType = TypeInfo(Word)) then
     Result := ESqlType.SQL_SHORT
@@ -329,55 +255,138 @@ begin
     raise Exception.Create('Неизвестный тип данных')
 end;
 
-{ TFactoryFunctionUniversal.TFunctionAnonymous }
+{ TExternalProcedureBase }
 
-constructor TFactoryFunctionUniversal.TFunctionAnonymous.Create(AParent: TFactoryFunctionUniversal; AStatus: IStatus; AMetadata: IRoutineMetadata);
-begin
-  Create(AParent, AStatus, TRoutineMetadata.Create(AStatus, AMetadata));
-end;
-
-constructor TFactoryFunctionUniversal.TFunctionAnonymous.Create(AParent: TFactoryFunctionUniversal; AStatus: IStatus; AMetadata: TRoutineMetadata);
+constructor TExternalProcedureBase.Create;
 begin
   inherited Create;
   // RLibraryHeapManager.Add(Self);
-  FParent := AParent;
-  FRoutineMetadata := AMetadata;
 end;
 
-destructor TFactoryFunctionUniversal.TFunctionAnonymous.Destroy;
+destructor TExternalProcedureBase.Destroy;
 begin
-  FRoutineMetadata.Destroy;
-  FParent := nil;
+  // RLibraryHeapManager.Remove(Self);
+  inherited;
+end;
+
+procedure TExternalProcedureBase.dispose;
+begin
+  Destroy
+end;
+
+procedure TExternalProcedureBase.getCharSet(AStatus: IStatus; AContext: IExternalContext; AName: PAnsiChar; ANameSize: Cardinal);
+begin
+  // virtual
+end;
+
+{ TFactoryFunction }
+
+constructor TFactoryFunction.Create(AInstanceClass: TExternalFunctionBase.TClass);
+begin
+  inherited Create;
+  FInstanceClass := AInstanceClass
+end;
+
+destructor TFactoryFunction.Destroy;
+begin
   RLibraryHeapManager.ClearDependentFromParent(Self);
   inherited;
 end;
 
-procedure TFactoryFunctionUniversal.TFunctionAnonymous.execute(AStatus: IStatus; AContext: IExternalContext; AInMsg, AOutMsg: Pointer);
+procedure TFactoryFunction.dispose;
+begin
+  Destroy
+end;
+
+function TFactoryFunction.newItem(AStatus: IStatus; AContext: IExternalContext; AMetadata: IRoutineMetadata): IExternalFunction;
 var
-  tmpInputMessage : PByte absolute AInMsg;
-  tmpOutputMessage: PByte absolute AOutMsg;
-  tmpInput        : TMessagesData;
-  tmpOutput       : TMessagesData;
+  lMetadata: TRoutineMetadata;
+begin
+  Result := nil;
+  try
+    lMetadata := nil;
+    try
+      lMetadata := TRoutineMetadata.Create(AStatus, AMetadata);
+      FInstanceClass.doNewItem(AStatus, AContext, lMetadata);
+      Result := FInstanceClass.Create(Self, AStatus, lMetadata);
+      lMetadata := nil;
+    finally
+      lMetadata.Free;
+    end;
+  except
+    on E: Exception do
+      FbException.catchException(AStatus, E);
+  end;
+  FbException.checkException(AStatus);
+end;
+
+procedure TFactoryFunction.setup(AStatus: IStatus; AContext: IExternalContext; AMetadata: IRoutineMetadata;
+  AInput, AOutput: IMetadataBuilder);
+var
+  lMetadata: TRoutineMetadata;
 begin
   try
-    tmpInput := TMessagesData.Create(AContext, FRoutineMetadata.Input, tmpInputMessage, AStatus);
+    lMetadata := nil;
     try
-      tmpOutput := TMessagesData.Create(AContext, FRoutineMetadata.Output, tmpOutputMessage, AStatus);
-      try
-        FParent.BeforeExecute(AStatus, tmpInput, tmpOutput);
-        FParent.doExecute(RExecuteParams.Create(AStatus, tmpInput, tmpOutput, Self));
-        FParent.AfterExecute(AStatus, tmpInput, tmpOutput);
-        FbException.checkException(AStatus);
-      finally
-        tmpOutput.Destroy
-      end;
+      lMetadata := TRoutineMetadata.Create(AStatus, AMetadata);
+      FInstanceClass.doSetup(RSetupParams.Create(AStatus, lMetadata, AInput, AOutput, Self));
     finally
-      tmpInput.Destroy
+      lMetadata.Free
     end;
   except
     on E: Exception do
       FbException.catchException(AStatus, E)
   end;
+  FbException.checkException(AStatus);
+end;
+
+{ TFunctionAnonymous }
+
+procedure TFunction.AfterExecute(AStatus: IStatus; AInput, AOutput: TMessagesData);
+begin
+  // virtual
+end;
+
+procedure TFunction.BeforeExecute(AStatus: IStatus; AInput, AOutput: TMessagesData);
+begin
+  // virtual
+end;
+
+function TFunction.doExecute(const AParams: RExecuteParams): Boolean;
+begin
+  Result := False
+end;
+
+procedure TFunction.execute(AStatus: IStatus; AContext: IExternalContext; AInMsg: Pointer; AOutMsg: Pointer);
+var
+  lInputMessage : PByte absolute AInMsg;
+  lOutputMessage: PByte absolute AOutMsg;
+  lInput        : TMessagesData;
+  lOutput       : TMessagesData;
+begin
+  try
+    lInput := nil;
+    lOutput := nil;
+    try
+      lInput := TMessagesData.Create(AContext, FRoutineMetadata.Input, lInputMessage, AStatus);
+      lOutput := TMessagesData.Create(AContext, FRoutineMetadata.Output, lOutputMessage, AStatus);
+
+      BeforeExecute(AStatus, lInput, lOutput);
+      doExecute(RExecuteParams.Create(AStatus, lInput, lOutput, Self));
+      AfterExecute(AStatus, lInput, lOutput);
+    finally
+      lOutput.Free;
+      lInput.Free
+    end;
+  except
+    on E: Exception do
+      FbException.catchException(AStatus, E)
+  end;
+end;
+
+class function TFunction.Factory: TFactoryFunction;
+begin
+  Result := TFactoryFunction.Create(Self)
 end;
 
 { TFactoryProcedureUniversal.TProcedureAnonymous }

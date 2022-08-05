@@ -13,6 +13,7 @@ uses
   SysUtils,
   Classes,
   Generics.Collections,
+  SyncObjs,
 {$IFDEF UDRLOG}udr_log, {$ENDIF UDRLOG}
   firebird_api,
   firebird_types,
@@ -23,13 +24,13 @@ uses
 {$IFDEF NODEF}{$ENDREGION}{$ENDIF}
 
 type
-  TObjectDestroy = class abstract(TIn0Instance<TObject>)
+  TObjectDestroy = class sealed(TFunctionIn0Instance<TObject>)
   protected
     function doExecute(const AParams: RExecuteParams): Boolean; override;
   end;
 
 type
-  TObjectCreator<TInstance: class, constructor> = class abstract(TOutInstance<TInstance>)
+  TObjectCreator<TInstance: class, constructor> = class abstract(TFunctionOutInstance<TInstance>)
   protected
     function doExecute(const AParams: RExecuteParams): Boolean; override;
   end;
@@ -55,6 +56,7 @@ type
     TObjectList = TDictionary<TObject, RHeapObjectInfo>;
   private
     class var FList: TObjectList;
+    class var FCS: TCriticalSection;
   private
     class procedure Initialize; static;
     class procedure Finalize; static;
@@ -70,16 +72,49 @@ type
     class procedure &Register(AStatus: IStatus; AUdrPlugin: IUdrPlugin); static;
   end;
 
+{$IFDEF  UDR_HAS_XML}
+type
+  TAdapter<TChild: IInterface> = class abstract
+  protected
+    FChild: TChild;
+    procedure DoCreate; virtual;
+  public
+    property Child: TChild read FChild;
+  public
+    constructor Create(AChild: TChild); reintroduce;
+    destructor Destroy; override;
+  end;
+{$ENDIF  UDR_HAS_XML}
+
+procedure ReferenceCountedFreeAndNil(var AInstance: IReferenceCounted); inline;
+procedure ReferenceCountedFree(AInstance: IReferenceCounted);inline;
+
 implementation
+
+procedure ReferenceCountedFree(AInstance: IReferenceCounted);
+begin
+  if AInstance <> nil then
+    AInstance.release;
+end;
+
+procedure ReferenceCountedFreeAndNil(var AInstance: IReferenceCounted);
+begin
+  ReferenceCountedFree(AInstance);
+  AInstance := nil
+end;
 
 { TObjectDestroy }
 
 function TObjectDestroy.doExecute(const AParams: RExecuteParams): Boolean;
 begin
   inherited;
-  RLibraryHeapManager.Remove(FInstanceIn);
-  FInstanceIn.Destroy;
-  Result := True;
+  Result := False;
+  if (FInstanceIn <> nil) then
+  begin
+    RLibraryHeapManager.Remove(FInstanceIn);
+    FInstanceIn.Free;
+    Result := True;
+  end;
   AParams.FOutput.MessageData[0].AsBoolean := Result
 end;
 
@@ -97,19 +132,25 @@ end;
 
 class procedure RLibraryHeapManager.Initialize;
 begin
-  FList := TObjectList.Create
+  FList := TObjectList.Create;
+  FCS:= TCriticalSection.Create;
 end;
 
 class procedure RLibraryHeapManager.Finalize;
 begin
-  ClearAll;
+  try
+    ClearAll;
+  finally
+    FList.Free;
+    FCS.Free;
+  end;
 end;
 
 class procedure RLibraryHeapManager.Add(AObject: TObject; AParent: TObject);
 var
   Info: RHeapObjectInfo;
 begin
-  TMonitor.Enter(FList);
+  FCS.Enter;
   try
     if FList.TryGetValue(AObject, Info) then
       Info.FParent := AParent
@@ -118,53 +159,52 @@ begin
     FList.AddOrSetValue(AObject, Info);
 {$IFDEF UDRLOG}TUdrLog.Default.Action(AObject, False); {$ENDIF UDRLOG}
   finally
-    TMonitor.Exit(FList)
+    FCS.Leave;
   end
 end;
 
 class procedure RLibraryHeapManager.Remove(AObject: TObject);
 begin
-  TMonitor.Enter(FList);
+  FCS.Enter;
   try
     FList.Remove(AObject);
 {$IFDEF UDRLOG}TUdrLog.Default.Action(AObject, True); {$ENDIF UDRLOG}
   finally
-    TMonitor.Exit(FList)
+    FCS.Leave
   end
 end;
 
 class procedure RLibraryHeapManager.ClearAll;
+var
+  Key: TObject;
 begin
+  FCS.Enter;
   try
-    TMonitor.Enter(FList);
-    try
-      for var Key in FList.Keys do
-        try
-          Key.Free;
-        except
-        end;
-      FList.Clear
-    finally
-      TMonitor.Exit(FList)
-    end;
+    for Key in FList.Keys do
+      try
+        Key.Free;
+      except
+      end;
+    FList.Clear
   finally
-    FList.Destroy;
+    FCS.Leave
   end;
 end;
 
 class procedure RLibraryHeapManager.ClearDependentFromParent(AParent: TObject);
 var
   Pairs       : TArray<TPair<TObject, RHeapObjectInfo>>;
+  Pair        : TPair<TObject, RHeapObjectInfo>;
   ThreadID    : NativeUInt;
   ListIsDestoy: TList<TObject>;
 begin
-  TMonitor.Enter(FList);
+  FCS.Enter;
   try
     ListIsDestoy := TList<TObject>.Create;
     try
       ThreadID := TThread.CurrentThread.ThreadID;
       Pairs := FList.ToArray;
-      for var Pair in Pairs do
+      for Pair in Pairs do
         if (assigned(AParent) and (Pair.Value.FParent = AParent)) or ((not assigned(AParent)) and (Pair.Value.FThread = ThreadID)) then
         begin
 {$IFDEF UDRLOG}TUdrLog.Default.Action(Pair.Key, True); {$ENDIF UDRLOG}
@@ -183,7 +223,7 @@ begin
     end;
   finally
     FList.Capacity := FList.Count;
-    TMonitor.Exit(FList)
+    FCS.Leave
   end
 end;
 
@@ -191,7 +231,7 @@ end;
 
 class procedure TUdrRegisterGeneral.Register(AStatus: IStatus; AUdrPlugin: IUdrPlugin);
 begin
-  AUdrPlugin.registerFunction(AStatus, 'Destroy', TObjectDestroy.Create);
+  AUdrPlugin.registerFunction(AStatus, 'Destroy', TObjectDestroy.Factory);
 end;
 
 { TObjectCreator<TInstance> }
@@ -214,6 +254,30 @@ begin
   FThread := AThread;
   FParent := AParent
 end;
+
+{$IFDEF  UDR_HAS_XML}
+
+{ TAdapter<TChild> }
+
+constructor TAdapter<TChild>.Create(AChild: TChild);
+begin
+  inherited Create;
+  FChild := AChild;
+  DoCreate
+end;
+
+destructor TAdapter<TChild>.Destroy;
+begin
+  FChild := nil;
+  inherited;
+end;
+
+procedure TAdapter<TChild>.DoCreate;
+begin
+  // virtual
+end;
+
+{$ENDIF  UDR_HAS_XML}
 
 initialization
 

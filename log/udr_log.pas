@@ -103,9 +103,10 @@ begin
 
   with FConnection.Params do
   begin
-    Values['Database'] := 'z:\__data\fb\Bulak-RF.fdb';
+    //Values['Database'] := 'z:\__data\fb\Bulak-RF.fdb';
+    Values['Database'] := 'Z:\database\Firebird\mbulak.fdb';
     Values['User_Name'] := 'SYSDBA';
-    Values['Password'] := 'SYSDBA';
+    Values['Password'] := 'masterkey';
     Values['CharacterSet'] := 'UTF8';
     Values['DriverID'] := 'FB';
   end;
@@ -128,6 +129,9 @@ begin
   FWaitCursor.Destroy;
   inherited;
 end;
+
+initialization
+  FDManager.SilentMode := True;
 
 {$ENDIF UDRLOG}
 

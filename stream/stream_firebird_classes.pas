@@ -33,15 +33,15 @@ uses
 
 type
   // второй параметр Blob,выходной Int64
-  TGetForStream = class abstract(TIn0Instance<TStream, Int64>)
+  TGetForStream = class abstract(TFunctionIn0Instance<TStream, Int64>)
   end;
 
 type
-  TSetFromStream = class abstract(TIn0Instance<TStream, Int64, Int64>)
+  TSetFromStream = class abstract(TFunctionIn0Instance<TStream, Int64, Int64>)
   end;
 
 type
-  TAssign = class sealed(TIn0Instance<TStream, TStream, Int16>)
+  TAssign = class sealed(TFunctionIn0Instance<TStream, TStream, Int16>)
   protected
     function doExecute(const AParams: RExecuteParams): Boolean; override;
   end;
@@ -83,7 +83,7 @@ type
   end;
 
 type
-  TReadCustom<TOut> = class abstract(TIn0Instance<TStream, Int64, TOut>)
+  TReadCustom<TOut> = class abstract(TFunctionIn0Instance<TStream, Int64, TOut>)
   protected
     function doExecute(const AParams: RExecuteParams): Boolean; override;
   end;
@@ -99,7 +99,7 @@ type
   end;
 
 type
-  TWrite<TIn1> = class sealed(TIn0Instance<TStream, TIn1, Int16>)
+  TWrite<TIn1> = class sealed(TFunctionIn0Instance<TStream, TIn1, Int16>)
   protected
     function doExecute(const AParams: RExecuteParams): Boolean; override;
   end;
@@ -108,28 +108,30 @@ type
 
 class procedure TUdrRegisterStream.Register(AStatus: IStatus; AUdrPlugin: IUdrPlugin);
 begin
-  AUdrPlugin.registerFunction(AStatus, 'StreamSharedCreate', TObjectCreator<TSharedStream>.Create);
-  AUdrPlugin.registerFunction(AStatus, 'StreamStringCreate', TObjectCreator<TStringStream>.Create);
+  {$IFDEF UDR_HAS_STREAM_SHARED}
+  AUdrPlugin.registerFunction(AStatus, 'StreamSharedCreate', TObjectCreator<TSharedStream>.Factory);
+  AUdrPlugin.registerFunction(AStatus, 'StreamStringCreate', TObjectCreator<TStringStream>.Factory);
+  {$ENDIF  UDR_HAS_STREAM_SHARED}
 
-  AUdrPlugin.registerFunction(AStatus, 'StreamAssign', TAssign.Create);
+  AUdrPlugin.registerFunction(AStatus, 'StreamAssign', TAssign.Factory);
 
-  AUdrPlugin.registerFunction(AStatus, 'StreamSizeGet', TSizeGet.Create);
-  AUdrPlugin.registerFunction(AStatus, 'StreamSizeSet', TSizeSet.Create);
+  AUdrPlugin.registerFunction(AStatus, 'StreamSizeGet', TSizeGet.Factory);
+  AUdrPlugin.registerFunction(AStatus, 'StreamSizeSet', TSizeSet.Factory);
 
-  AUdrPlugin.registerFunction(AStatus, 'StreamPositionGet', TPositionGet.Create);
-  AUdrPlugin.registerFunction(AStatus, 'StreamPositionSet', TPositionSet.Create);
+  AUdrPlugin.registerFunction(AStatus, 'StreamPositionGet', TPositionGet.Factory);
+  AUdrPlugin.registerFunction(AStatus, 'StreamPositionSet', TPositionSet.Factory);
 
-  AUdrPlugin.registerFunction(AStatus, 'StreamLengthGet', TLengthGet.Create);
-  AUdrPlugin.registerFunction(AStatus, 'StreamLengthChar', TLengthCharGet.Create);
+  AUdrPlugin.registerFunction(AStatus, 'StreamLengthGet', TLengthGet.Factory);
+  AUdrPlugin.registerFunction(AStatus, 'StreamLengthChar', TLengthCharGet.Factory);
 
-  AUdrPlugin.registerFunction(AStatus, 'StreamReadString', TRead<string>.Create);
-  AUdrPlugin.registerFunction(AStatus, 'StreamReadBlob', TRead<IBlob>.Create);
+  AUdrPlugin.registerFunction(AStatus, 'StreamReadString', TRead<string>.Factory);
+  AUdrPlugin.registerFunction(AStatus, 'StreamReadBlob', TRead<IBlob>.Factory);
 
-  AUdrPlugin.registerFunction(AStatus, 'StreamWriteString', TWrite<string>.Create);
-  AUdrPlugin.registerFunction(AStatus, 'StreamWriteBlob', TWrite<IBlob>.Create);
+  AUdrPlugin.registerFunction(AStatus, 'StreamWriteString', TWrite<string>.Factory);
+  AUdrPlugin.registerFunction(AStatus, 'StreamWriteBlob', TWrite<IBlob>.Factory);
 
-  AUdrPlugin.registerFunction(AStatus, 'StreamToString', TReadTo<string>.Create);
-  AUdrPlugin.registerFunction(AStatus, 'StreamToBlob', TReadTo<IBlob>.Create);
+  AUdrPlugin.registerFunction(AStatus, 'StreamToString', TReadTo<string>.Factory);
+  AUdrPlugin.registerFunction(AStatus, 'StreamToBlob', TReadTo<IBlob>.Factory);
 end;
 
 { TAssign }
@@ -213,70 +215,55 @@ end;
 { TReadCustom<TOut> }
 
 function TReadCustom<TOut>.doExecute(const AParams: RExecuteParams): Boolean;
-
-var
-  ValueSize  : Int64;
-  ValueBuffer: TBytes;
-  ValueStream: TStream;
+ var
+  lValueSize  : Int64;
+  lValueData: TBytes;
 begin
   inherited;
 
-  ValueSize := FInstanceIn.Size;
+  lValueSize := FInstanceIn.Size;
 
-  SetLength(ValueBuffer, ValueSize);
-  ValueSize := FInstanceIn.Read(ValueBuffer, ValueSize);
-  SetLength(ValueBuffer, ValueSize);
+  SetLength(lValueData, lValueSize);
+  lValueSize := FInstanceIn.Read(lValueData, lValueSize);
+  SetLength(lValueData, lValueSize);
 
   case FIn1.Metadata.SQLTypeEnum of
+
     SQL_VARYING, SQL_TEXT:
-      FIn1.AsString := TEncoding.UTF8.GetString(ValueBuffer);
+      FIn1.AsString := TEncoding.UTF8.GetString(lValueData);
+
     SQL_BLOB, SQL_QUAD:
-      begin
-        ValueStream := TMemoryStream.Create;
-        try
-          ValueStream.CopyFrom(FInstanceIn, ValueSize);
-          ValueStream.Position := 0;
-          QUADHelper.LoadFromStream(FIn1, FIn1.Parent.Status, FIn1.Parent.Context, ValueStream);
-        finally
-          ValueStream.DisposeOf
-        end;
-      end;
+      TStreamBlob.BytesToMessage(lValueData, FIn1, FIn1.Parent.Status, FIn1.Parent.Context);
+
   else
-    raise Exception.Create(format(rsErrorDataTypeNotSupportedFormat, [rsInputNominative, 2, FIn1.Metadata.SQLTypeAsString]))
+    raise Exception.CreateFmt(rsErrorDataTypeNotSupportedFormat, [rsInputNominative, 2, FIn1.Metadata.SQLTypeAsString])
   end;
+
   Result := True;
 end;
 
 { TWrite<TIn1> }
 
 function TWrite<TIn1>.doExecute(const AParams: RExecuteParams): Boolean;
-
 var
-  ValueBuffer: TBytes;
-  ValueStream: TStream;
+  lBuffer: TBytes;
 begin
   inherited;
 
   if not FIn1.isNull then
     case FIn1.Metadata.SQLTypeEnum of
+
       SQL_VARYING, SQL_TEXT:
         begin
-          ValueBuffer := TEncoding.UTF8.GetBytes(FIn1.AsString);
-          FInstanceIn.WriteData(ValueBuffer, Length(ValueBuffer));
+          lBuffer := TEncoding.UTF8.GetBytes(FIn1.AsString);
+          FInstanceIn.WriteData(lBuffer, Length(lBuffer));
         end;
+
       SQL_BLOB, SQL_QUAD:
-        begin
-          ValueStream := TMemoryStream.Create;
-          try
-            QUADHelper.SaveToStream(ISC_QUADPtr(FIn1.GetData), FIn1.Parent.Status, FIn1.Parent.Context, ValueStream);
-            ValueStream.Position := 0;
-            FInstanceIn.CopyFrom(ValueStream, ValueStream.Size)
-          finally
-            ValueStream.Destroy
-          end;
-        end;
+        TStreamBlob.Clone(FIn1, FInstanceIn, FIn1.Parent.Status, FIn1.Parent.Context);
+
     else
-      raise Exception.Create(format(rsErrorDataTypeNotSupportedFormat, [rsInputNominative, 2, FIn1.Metadata.SQLTypeAsString]))
+      raise Exception.CreateFmt(rsErrorDataTypeNotSupportedFormat, [rsInputNominative, 2, FIn1.Metadata.SQLTypeAsString])
     end;
   Result := True;
   FOutput.AsBoolean := True
