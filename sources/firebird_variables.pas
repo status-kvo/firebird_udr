@@ -1,6 +1,6 @@
 ﻿unit firebird_variables;
 
-{$I .\sources\general.inc}
+{$INCLUDE .\sources\general.inc}
 
 interface
 
@@ -35,7 +35,7 @@ implementation
 
 initialization
 
-FirebirdSetting.myUnloadFlag := False;
+FirebirdSetting.myUnloadFlag := True;
 
 finalization
 

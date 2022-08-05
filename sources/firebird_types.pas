@@ -8,7 +8,11 @@ interface
 
 uses
   SysUtils,
-  NetEncoding,
+  {$IFDEF FPC}
+    base64,
+  {$ELSE}
+    NetEncoding,
+  {$ENDIF}
   firebird_api,
   firebird_charset;
 {$IFDEF NODEF}{$ENDREGION}{$ENDIF}
@@ -174,12 +178,12 @@ begin
 {$IFNDEF FPC}
     Result := TNetEncoding.base64.EncodeBytesToString(@Value, Length);
 {$ELSE}
-    Result := ACharSet.GetString(TBytes(@Value), 0, Length);
+    Result := String(ACharSet.GetString(TBytes(@Value), 0, Length));
     Result := EncodeStringBase64(Result);
 {$ENDIF}
   end
   else
-    Result := ACharSet.GetString(TBytes(@Value), 0, Length);
+    Result := String(ACharSet.GetString(TBytes(@Value), 0, Length));
 end;
 
 end.

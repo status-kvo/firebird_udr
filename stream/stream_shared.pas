@@ -4,13 +4,15 @@
 
 interface
 
-{$IFDEF NODEF}{$REGION 'uses'}{$ENDIF}
+{$IFDEF UDR_HAS_STREAM_SHARED}
+
+{$REGION 'uses'}
 
 uses
   WinApi.Windows,
   System.SysUtils,
   System.Classes;
-{$IFDEF NODEF}{$ENDREGION}{$ENDIF}
+{$ENDREGION}
 
 type
   TSharedStream = class sealed(TStream)
@@ -43,7 +45,11 @@ type
 const
   SwapHandle = $FFFFFFFF; // Handle файла подкачки
 
+{$ENDIF  UDR_HAS_STREAM_SHARED}
+
 implementation
+
+{$IFDEF UDR_HAS_STREAM_SHARED}
 
 resourcestring
   CouldNotMapViewOfFile = 'Could not map view of file.';
@@ -201,4 +207,5 @@ begin
   AStream.Write(FMemory^, FSize);
 end;
 
+{$ENDIF  UDR_HAS_STREAM_SHARED}
 end.

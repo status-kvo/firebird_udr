@@ -1,6 +1,6 @@
 ﻿unit firebird_blob;
 
-{$I .\sources\general.inc}
+{$INCLUDE .\sources\general.inc}
 
 interface
 
@@ -19,51 +19,46 @@ const
 type
   TBlobType = (btSegmented, btStream);
 
-  TFbBlobInfo = record
-    ANumSegments: Int32;
-    AMaxSegmentSize: Int32;
-    TotalLength: Int32;
-    ABlobType: SmallInt;
+  TFbBlobInfo = packed record
+    NumSegments: Int64;
+    MaxSegmentSize: Int64;
+    TotalLength: Int64;
+    BlobType: SmallInt;
   end;
 
-  BlobHelper = class helper for IBlob
+type
+  TStreamBlob = class sealed(TStream)
+  private
+    FStatus     : IStatus;
+    FAttachment : IAttachment;
+    FTransaction: ITransaction;
+    FBlob       : IBlob;
+    constructor Create(aIsRead: Boolean; AData: ISC_QUADPtr; AStatus: IStatus; AContext: IExternalContext); overload;
   public
-    function Read(AStatus: IStatus; var ABuffer; ACount: UInt32): UInt32;
+    function Read(var ABuffer; ACount: Longint): Longint; override;
+    function Write(const ABuffer; ACount: Longint): Longint; override;
+    function Seek(const AOffset: Int64; AOrigin: TSeekOrigin): Int64; override;
+    function GetSize: Int64; override;
   public
-    function Write(AStatus: IStatus; const ABuffer; ACount: UInt32): UInt32;
+    procedure Cancel;
+    function  BlobInfoGet: TFbBlobInfo;
   public
-    procedure GetBlobInfo(AStatus: IStatus; var ANumSegments, AMaxSegmentSize, ATotalSize: Int32; var ABlobType: SmallInt);
+    class procedure Clone(const ASource, ATarger: TMessagesData.RMessage; AStatus: IStatus; AContext: IExternalContext); overload;
+    class procedure Clone(const ASource: TMessagesData.RMessage; ATraget: TStream; AStatus: IStatus; AContext: IExternalContext); overload;
+    class procedure BytesToMessage(const ABytes: TBytes; const ATarger: TMessagesData.RMessage; AStatus: IStatus; AContext: IExternalContext);
+    class function  MessageToBytes(const ASource: TMessagesData.RMessage; AStatus: IStatus; AContext: IExternalContext): TBytes;
   public
-{$IFDEF NODEF}{$REGION 'Описание'}{$ENDIF}
-    /// <summary>
-    /// Загружает в BLOB содержимое потока <br />@param(AStatus Статус вектор) <br />@param(AStream Поток)
-    /// </summary>
-{$IFDEF NODEF}{$ENDREGION}{$ENDIF}
-    procedure LoadFromStream(AStatus: IStatus; AStream: TStream);
-  public
-{$IFDEF NODEF}{$REGION 'Описание'}{$ENDIF}
-    /// <summary>
-    /// Загружает в поток содержимое BLOB <br />@param(AStatus Статус вектор) <br />@param(AStream Поток)
-    /// </summary>
-{$IFDEF NODEF}{$ENDREGION}{$ENDIF}
-    procedure SaveToStream(AStatus: IStatus; AStream: TStream);
-  end;
+    constructor Create(AStatus: IStatus; ABlob: IBlob); overload;
+    constructor CreateRead(AData: ISC_QUADPtr; AStatus: IStatus; AContext: IExternalContext); virtual;
+    constructor CreateWrite(AData: ISC_QUADPtr; AStatus: IStatus; AContext: IExternalContext; aNull: Boolean = False); virtual;
 
-  QUADHelper = record // record helper for ISC_QUAD
-  public
-    class procedure Action(aIsRead: Boolean; AData: ISC_QUADPtr; AStatus: IStatus; AContext: IExternalContext; AStream: TStream;
-      AProc: TProc<IBlob>); static;
-  public
-    class procedure SaveToStream(AData: ISC_QUADPtr; AStatus: IStatus; AContext: IExternalContext; AStream: TStream); overload; static;
-    class function SaveToStream(AData: ISC_QUADPtr; AStatus: IStatus; AContext: IExternalContext): TStream; overload; static;
-  public
-    class procedure LoadFromStream(aMessage: TMessagesData.RMessage; AStatus: IStatus; AContext: IExternalContext; AStream: TStream); static;
+    destructor Destroy; override;
   end;
 
 implementation
 
 uses
-  Math;
+  Math, firebird_classes;
 
 const
   (* ************************ *)
@@ -76,6 +71,10 @@ const
   isc_info_blob_max_segment  = 5;
   isc_info_blob_total_length = 6;
   isc_info_blob_type         = 7;
+
+resourcestring
+  rsBlobNotCreate = 'Firebird IBlob is not create';
+  rsBlobNotOperationNegative = 'Firebird IBlob is not support negative index';
 
 function isc_portable_integer(const APtr: PByte; ALength: SmallInt): Int64;
 var
@@ -108,182 +107,248 @@ begin
     Result := 0
 end;
 
-{ BlobHelper }
+{ TStreamBlob }
 
-procedure BlobHelper.GetBlobInfo(AStatus: IStatus; var ANumSegments, AMaxSegmentSize, ATotalSize: Int32; var ABlobType: SmallInt);
+function TStreamBlob.BlobInfoGet: TFbBlobInfo;
 var
-  tmpItems     : array [0 .. 3] of Byte;
-  tmpResults   : array [0 .. 99] of Byte;
-  tmpIndex     : Int32;
-  tmpItemLength: Int32;
-  tmpItem      : Int32;
+  lItems     : array [0 .. 3] of Byte;
+  lResults   : array [0 .. 99] of Byte;
+  lIndex     : Int32;
+  lItemLength: Int32;
+  lItem      : Int32;
 begin
-  tmpItems[0] := Byte(isc_info_blob_num_segments);
-  tmpItems[1] := Byte(isc_info_blob_max_segment);
-  tmpItems[2] := Byte(isc_info_blob_total_length);
-  tmpItems[3] := Byte(isc_info_blob_type);
+  if FBlob = nil then
+    raise Exception.Create(rsBlobNotCreate);
 
-  Self.getInfo(AStatus, 4, @tmpItems[0], SizeOf(tmpResults), @tmpResults);
+  lItems[0] := Byte(isc_info_blob_num_segments);
+  lItems[1] := Byte(isc_info_blob_max_segment);
+  lItems[2] := Byte(isc_info_blob_total_length);
+  lItems[3] := Byte(isc_info_blob_type);
 
-  tmpIndex := 0;
-  while (tmpIndex < SizeOf(tmpResults)) and (tmpResults[tmpIndex] <> Byte(isc_info_end)) do
+  fBlob.getInfo(FStatus, 4, @lItems[0], SizeOf(lResults), @lResults);
+
+  lIndex := 0;
+  while (lIndex < SizeOf(lResults)) and (lResults[lIndex] <> Byte(isc_info_end)) do
   begin
-    tmpItem := Int32(tmpResults[tmpIndex]);
-    Inc(tmpIndex);
-    tmpItemLength := isc_portable_integer(@tmpResults[tmpIndex], 2);
-    Inc(tmpIndex, 2);
-    case tmpItem of
+    lItem := Int32(lResults[lIndex]);
+    Inc(lIndex);
+    lItemLength := isc_portable_integer(@lResults[lIndex], 2);
+    Inc(lIndex, 2);
+    case lItem of
       isc_info_blob_num_segments:
-        ANumSegments := isc_portable_integer(@tmpResults[tmpIndex], tmpItemLength);
+        Result.NumSegments := isc_portable_integer(@lResults[lIndex], lItemLength);
       isc_info_blob_max_segment:
-        AMaxSegmentSize := isc_portable_integer(@tmpResults[tmpIndex], tmpItemLength);
+        Result.MaxSegmentSize := isc_portable_integer(@lResults[lIndex], lItemLength);
       isc_info_blob_total_length:
-        ATotalSize := isc_portable_integer(@tmpResults[tmpIndex], tmpItemLength);
+        Result.TotalLength := isc_portable_integer(@lResults[lIndex], lItemLength);
       isc_info_blob_type:
-        ABlobType := isc_portable_integer(@tmpResults[tmpIndex], tmpItemLength);
+        Result.BlobType := isc_portable_integer(@lResults[lIndex], lItemLength);
     end;
-    Inc(tmpIndex, tmpItemLength);
-  end;
-
-end;
-
-procedure BlobHelper.LoadFromStream(AStatus: IStatus; AStream: TStream);
-var
-  tmpStreamSize: Int32;
-  tmpReadLength: Int32;
-  tmpBuffer    : TBytes;
-begin
-  tmpStreamSize := AStream.Size;
-  AStream.Position := 0;
-  SetLength(tmpBuffer, MAX_SEGMENT_SIZE);
-  while tmpStreamSize <> 0 do
-  begin
-    tmpReadLength := Min(tmpStreamSize, MAX_SEGMENT_SIZE);
-    tmpReadLength := AStream.Read(tmpBuffer, 0, tmpReadLength);
-    Self.putSegment(AStatus, tmpReadLength, @tmpBuffer[0]);
-    Dec(tmpStreamSize, tmpReadLength);
+    Inc(lIndex, lItemLength);
   end;
 end;
 
-function BlobHelper.Read(AStatus: IStatus; var ABuffer; ACount: UInt32): UInt32;
-var
-  tmpLocalLength: UInt32;
-  tmpLocalBuffer: PByte;
-  tmpBytesRead  : UInt32;
-  tmpRetutnCode : Int32;
+procedure TStreamBlob.Cancel;
 begin
-  Result := 0;
-
-  tmpLocalBuffer := PByte(@ABuffer);
-  repeat
-    tmpLocalLength := Min(ACount, MAX_SEGMENT_SIZE);
-    tmpRetutnCode := Self.getSegment(AStatus, tmpLocalLength, tmpLocalBuffer, @tmpBytesRead);
-    Inc(tmpLocalBuffer, tmpBytesRead);
-    Inc(Result, tmpBytesRead);
-    Dec(ACount, tmpBytesRead);
-  until ((tmpRetutnCode <> IStatus.RESULT_OK) and (tmpRetutnCode <> IStatus.RESULT_SEGMENT)) or (ACount = 0);
+  if FBlob <> nil then
+    FBlob.cancel(FStatus)
 end;
 
-procedure BlobHelper.SaveToStream(AStatus: IStatus; AStream: TStream);
-var
-  tmpBuffer    : array [0 .. MAX_SEGMENT_SIZE] of Byte;
-  tmpBytesRead : UInt32;
-  tmpBufferSize: UInt32;
+class procedure TStreamBlob.Clone(const ASource: TMessagesData.RMessage; ATraget: TStream; AStatus: IStatus; AContext: IExternalContext);
+ var
+  lSource: TStreamBlob;
 begin
-  AStream.Position := 0;
-  tmpBufferSize := Min(SizeOf(tmpBuffer), MAX_SEGMENT_SIZE);
-  while True do
-  begin
-    case Self.getSegment(AStatus, tmpBufferSize, @tmpBuffer[0], @tmpBytesRead) of
-      IStatus.RESULT_OK:
-        AStream.WriteBuffer(tmpBuffer, tmpBytesRead);
-      IStatus.RESULT_SEGMENT:
-        AStream.WriteBuffer(tmpBuffer, tmpBytesRead);
-    else
-      break;
-    end;
-  end;
-end;
-
-function BlobHelper.Write(AStatus: IStatus; const ABuffer; ACount: UInt32): UInt32;
-var
-  tmpLocalBuffer: PByte;
-  tmpLocalLength: UInt32;
-begin
-  Result := 0;
-  if ACount > 0 then
-  begin
-    tmpLocalBuffer := PByte(@ABuffer);
-    repeat
-      tmpLocalLength := Min(ACount, MAX_SEGMENT_SIZE);
-      Self.putSegment(AStatus, tmpLocalLength, tmpLocalBuffer);
-      Inc(tmpLocalBuffer, tmpLocalLength);
-      Inc(Result, tmpLocalLength);
-      Dec(ACount, tmpLocalLength);
-    until ACount <= 0;
-  end;
-end;
-
-{ QUADHelper }
-
-class procedure QUADHelper.Action(aIsRead: Boolean; AData: ISC_QUADPtr; AStatus: IStatus; AContext: IExternalContext; AStream: TStream;
-  AProc: TProc<IBlob>);
-var
-  tmpBlob       : IBlob;
-  tmpAttachment : IAttachment;
-  tmpTransaction: ITransaction;
-begin
-  tmpAttachment := AContext.getAttachment(AStatus);
+  lSource := nil;
   try
-    FbException.checkException(AStatus);
-    tmpTransaction := AContext.getTransaction(AStatus);
-    try
-      FbException.checkException(AStatus);
-      if aIsRead then
-        tmpBlob := tmpAttachment.openBlob(AStatus, tmpTransaction, AData, 0, nil)
-      else
-        tmpBlob := tmpAttachment.createBlob(AStatus, tmpTransaction, AData, 0, nil);
-      try
-        FbException.checkException(AStatus);
-        AProc(tmpBlob);
-        FbException.checkException(AStatus);
-      finally
-        tmpBlob.close(AStatus);
-      end;
-    finally
-      tmpTransaction.Release
-    end;
+    lSource := TStreamBlob.CreateRead(ISC_QUADPtr(ASource.GetData), AStatus, AContext);
+    ATraget.CopyFrom(lSource, lSource.Size);
   finally
-    tmpAttachment.Release
+    lSource.Free;
   end;
 end;
 
-class procedure QUADHelper.LoadFromStream(aMessage: TMessagesData.RMessage; AStatus: IStatus; AContext: IExternalContext; AStream: TStream);
+class procedure TStreamBlob.Clone(const ASource, ATarger: TMessagesData.RMessage; AStatus: IStatus; AContext: IExternalContext);
+ var
+  lSource: TStreamBlob;
+  lTarget: TStreamBlob;
 begin
-
-  Action(False, ISC_QUADPtr(aMessage.GetData), AStatus, AContext, AStream,
-    procedure(ABlob: IBlob)
-    begin
-      ABlob.LoadFromStream(AStatus, AStream);
-    end);
-  aMessage.Null := False;
-
+  lSource := nil;
+  lTarget := nil;
+  try
+    lSource := TStreamBlob.CreateRead(ISC_QUADPtr(ASource.GetData), AStatus, AContext);
+    lTarget := TStreamBlob.CreateWrite(ISC_QUADPtr(ATarger.GetData), AStatus, AContext);
+    lTarget.CopyFrom(lSource, lSource.Size);
+    ATarger.setNull(False);
+  finally
+    lSource.Free;
+    lTarget.Free;
+  end;
 end;
 
-class function QUADHelper.SaveToStream(AData: ISC_QUADPtr; AStatus: IStatus; AContext: IExternalContext): TStream;
+class procedure TStreamBlob.BytesToMessage(const ABytes: TBytes; const ATarger: TMessagesData.RMessage; AStatus: IStatus; AContext: IExternalContext);
+ var
+  lTarger: TStreamBlob;
 begin
-  Result := TMemoryStream.Create;
-  SaveToStream(AData, AStatus, AContext, Result)
+  lTarger := nil;
+  try
+    lTarger := TStreamBlob.CreateWrite(ISC_QUADPtr(ATarger.GetData), AStatus, AContext);
+    lTarger.Write(ABytes, Length(ABytes));
+    ATarger.setNull(False);
+  finally
+    lTarger.Free;
+  end;
 end;
 
-class procedure QUADHelper.SaveToStream(AData: ISC_QUADPtr; AStatus: IStatus; AContext: IExternalContext; AStream: TStream);
+class function TStreamBlob.MessageToBytes(const ASource: TMessagesData.RMessage; AStatus: IStatus; AContext: IExternalContext): TBytes;
+ var
+  lSource: TStreamBlob;
 begin
-  Action(True, AData, AStatus, AContext, AStream,
-    procedure(ABlob: IBlob)
-    begin
-      ABlob.SaveToStream(AStatus, AStream);
-      AStream.Position := 0;
-    end)
+  lSource := nil;
+  try
+    lSource := TStreamBlob.CreateRead(ISC_QUADPtr(ASource.GetData), AStatus, AContext);
+    SetLength(Result, lSource.Size);
+    lSource.Read(Result, Length(Result));
+  finally
+    lSource.Free;
+  end;
+end;
+
+constructor TStreamBlob.Create(AStatus: IStatus; ABlob: IBlob);
+begin
+  inherited Create;
+
+  FStatus := AStatus;
+  FBlob := ABlob;
+end;
+
+constructor TStreamBlob.Create(aIsRead: Boolean; AData: ISC_QUADPtr; AStatus: IStatus; AContext: IExternalContext);
+ var
+  lBlob: IBlob;
+begin
+  try
+    FAttachment := AContext.getAttachment(AStatus);
+    FbException.checkException(AStatus);
+    FTransaction := AContext.getTransaction(AStatus);
+    FbException.checkException(AStatus);
+    if aIsRead then
+      lBlob := FAttachment.openBlob(AStatus, FTransaction, AData, 0, nil)
+    else
+      lBlob := FAttachment.createBlob(AStatus, FTransaction, AData, 0, nil);
+    FbException.checkException(AStatus);
+    Create(AStatus, lBlob)
+  except
+    ReferenceCountedFree(FTransaction);
+    ReferenceCountedFree(FAttachment);
+    raise;
+  end;
+end;
+
+constructor TStreamBlob.CreateRead(AData: ISC_QUADPtr; AStatus: IStatus; AContext: IExternalContext);
+begin
+  Create(True, AData, AStatus, AContext);
+end;
+
+constructor TStreamBlob.CreateWrite(AData: ISC_QUADPtr; AStatus: IStatus; AContext: IExternalContext; aNull: Boolean = False);
+begin
+  Create(False, AData, AStatus, AContext);
+end;
+
+destructor TStreamBlob.Destroy;
+begin
+  if FBlob <> nil then
+  begin
+    FBlob.close(FStatus);
+    //ReferenceCountedFree(FBlob);
+  end;
+
+  ReferenceCountedFree(FTransaction);
+  ReferenceCountedFree(FAttachment);
+
+  FStatus := nil;
+
+  inherited;
+end;
+
+function TStreamBlob.GetSize: Int64;
+begin
+  Result := Int64(BlobInfoGet.TotalLength)
+end;
+
+function TStreamBlob.Read(var ABuffer; ACount: Longint): Longint;
+var
+  lRead: Cardinal;
+  lSize: Longint;
+  lData: PByte;
+begin
+  if FBlob = nil then
+    raise Exception.Create(rsBlobNotCreate);
+
+  if ACount < 0 then
+    raise Exception.Create(rsBlobNotOperationNegative);
+
+  Result := 0;
+  lData := @ABuffer;
+  while ACount > 0 do
+  begin
+    lSize := Min(ACount, MAX_SEGMENT_SIZE);
+
+    if not (FBlob.getSegment(FStatus, Cardinal(lSize), lData, lRead) in [IStatus.RESULT_OK, IStatus.RESULT_SEGMENT]) then
+      break;
+
+    Dec(ACount, Longint(lRead));
+    Inc(lData, lRead);
+    Inc(Result, Longint(lSize))
+  end;
+end;
+
+function TStreamBlob.Write(const ABuffer; ACount: Longint): Longint;
+var
+  lSize: Longint;
+  lData: PByte;
+begin
+  if FBlob = nil then
+    raise Exception.Create(rsBlobNotCreate);
+
+  if ACount < 0 then
+    raise Exception.Create(rsBlobNotOperationNegative);
+
+  Result := 0;
+  lData := @ABuffer;
+  while ACount > 0 do
+  begin
+    lSize := Min(ACount, MAX_SEGMENT_SIZE);
+    FBlob.PutSegment(FStatus, Cardinal(lSize), lData);
+
+    Dec(ACount, lSize);
+    Inc(lData, lSize);
+    Inc(Result, lSize)
+  end;
+end;
+
+function TStreamBlob.Seek(const AOffset: Int64; AOrigin: TSeekOrigin): Int64;
+ var
+  lSegment: Int32;
+  lFull: Int64;
+begin
+  if FBlob = nil then
+    raise Exception.Create(rsBlobNotCreate);
+
+  lFull := AOffset;
+  Result := AOffset;
+  repeat
+
+    if lFull > Int64(Int32.MaxValue) then
+      lSegment := Int32.MaxValue
+    else if lFull < Int64(Int32.MinValue) then
+      lSegment := Int32.MinValue
+    else
+      lSegment := Int32(lFull);
+
+    FBlob.seek(FStatus, Integer(AOrigin), Integer(AOffset));
+    Dec(lFull, Int64(lSegment));
+    AOrigin := soCurrent;
+
+  until lFull <> 0;
 end;
 
 end.

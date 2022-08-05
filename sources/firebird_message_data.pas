@@ -1,6 +1,6 @@
 ﻿unit firebird_message_data;
 
-{$I .\sources\general.inc}
+{$INCLUDE .\sources\general.inc}
 
 interface
 
@@ -271,8 +271,6 @@ end;
 { TMessagesData.RMessage }
 
 procedure TMessagesData.RMessage.assign(const ASource: RMessage);
-var
-  tmpStream: TStream;
 begin
   if ASource.isNull then
     Self.Null := True
@@ -297,16 +295,7 @@ begin
         AsBigint := ASource.AsBigint;
 
       SQL_BLOB, SQL_QUAD:
-        begin
-          tmpStream := TMemoryStream.Create;
-          try
-            QUADHelper.SaveToStream(ISC_QUADPtr(ASource.GetData), Parent.Status, Parent.Context, tmpStream);
-            tmpStream.Position := 0;
-            QUADHelper.LoadFromStream(Self, Parent.Status, Parent.Context, tmpStream)
-          finally
-            tmpStream.Destroy
-          end;
-        end;
+        TStreamBlob.Clone(ASource, Self, Parent.Status, Parent.Context);
 
       SQL_TIME:
         AsTime := ASource.AsTime;
@@ -318,7 +307,7 @@ begin
         AsDateTime := ASource.AsDateTime;
 
     else
-      raise Exception.Create(format(rsErrorDataTypeNotSupportedFormat, [rsInputNominative, 2, Metadata.SQLTypeAsString]))
+      raise Exception.CreateFmt(rsErrorDataTypeNotSupportedFormat, [rsInputNominative, 2, Metadata.SQLTypeAsString])
     end
 end;
 
@@ -720,7 +709,7 @@ begin
       end;
 
     SQL_FLOAT:
-      setFloat(Single(AValue));
+      setFloat({$IFDEF FPC}AValue{$ELSE}Single(AValue){$ENDIF});
 
     SQL_TEXT, SQL_VARYING:
       setString(AValue.ToString());
@@ -880,7 +869,6 @@ procedure TMessagesData.RMessage.setString(const AValue: string);
 var
   ValueBytes        : TBytes;
   ValueBuffer       : PByte;
-  ValueStream       : TStream;
   ValueFloat        : Double;
   ValueFloatSettings: TFormatSettings;
 begin
@@ -934,7 +922,7 @@ begin
             ValueBytes := Encoding.GetBytes(AValue);
             ValueBuffer := FBuffer;
             PWord(ValueBuffer)^ := Word(Length(ValueBytes));
-            if Length(ValueBytes) > DataLength then
+            if Length(ValueBytes) > Integer(DataLength) then
               raise Exception.CreateFmt(rsStringTrancationChar, [DataLength, Length(ValueBytes)])
             else
               Move(ValueBytes[0], (ValueBuffer + 2)^, Length(ValueBytes));
@@ -943,12 +931,12 @@ begin
 
       SQL_TEXT:
         begin
-          if (Cardinal(Length(AValue)) > DataLength) then
+          if (Length(AValue) > Integer(DataLength)) then
             raise Exception.CreateFmt(rsStringTrancationChar, [DataLength, Length(AValue)])
           else
           begin
             ValueBytes := Encoding.GetBytes(AValue);
-            if high(ValueBytes) > DataLength then
+            if high(ValueBytes) > Integer(DataLength) then
               raise Exception.CreateFmt(rsStringTrancationByte, [DataLength, high(ValueBytes)])
             else
             begin
@@ -959,17 +947,8 @@ begin
         end;
 
       SQL_BLOB, SQL_QUAD:
-        begin
-          ValueStream := TMemoryStream.Create;
-          try
-            ValueBytes := Encoding.GetBytes(AValue);
-            ValueStream.Write(ValueBytes, Length(ValueBytes));
-            ValueStream.Position := 0;
-            QUADHelper.LoadFromStream(Self, Parent.Status, Parent.Context, ValueStream);
-          finally
-            ValueStream.DisposeOf
-          end;
-        end;
+        TStreamBlob.BytesToMessage(Encoding.GetBytes(AValue), Self, Parent.Status, Parent.Context);
+
     end;
 end;
 

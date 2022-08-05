@@ -20,7 +20,8 @@ uses
   json_firebird_classes in 'json\json_firebird_classes.pas',
   stream_firebird_classes in 'stream\stream_firebird_classes.pas',
   stream_shared in 'stream\stream_shared.pas',
-  udr_log in 'log\udr_log.pas';
+  udr_log in 'log\udr_log.pas',
+  JsonDataObjectsKVO in 'json\JsonDataObjectsKVO.pas';
 
 function firebird_udr_plugin(AStatus: IStatus; AUnloadFlagLocal: BooleanPtr; AUdrPlugin: IUdrPlugin): BooleanPtr; cdecl;
 begin

@@ -1,24 +1,26 @@
 ﻿unit firebird_message_metadata;
 
-{$I .\sources\general.inc}
+{$INCLUDE .\sources\general.inc}
 
 interface
 
-{$IFDEF NODEF}{$REGION 'uses'}{$ENDIF}
+{$REGION 'uses'}
 
 uses
+  {$IFNDEF FPC}
   AnsiStrings,
+  {$ENDIF}
   Classes,
   SysUtils,
   SysConst,
-  System.Generics.Collections,
+  Generics.Collections,
   firebird_api,
   firebird_types,
   firebird_charset;
-{$IFDEF NODEF}{$ENDREGION}{$ENDIF}
+{$ENDREGION}
 
 type
-{$IFDEF NODEF}{$REGION 'TMessageMetadataItem - Элемент метаданных'}{$ENDIF}
+{$REGION 'TMessageMetadataItem - Элемент метаданных'}
   /// <summary>
   /// Элемент метаданных
   /// </summary>
@@ -49,15 +51,15 @@ type
     constructor Create;
     destructor Destroy; override;
   public
-{$IFDEF NODEF}{$REGION 'Получение данных'}{$ENDIF}
+{$REGION 'Получение данных'}
     function GetDataPtr(ABuffer: PByte): PByte;
-{$IFDEF NODEF}{$ENDREGION}{$ENDIF}
+{$ENDREGION}
   public
-{$IFDEF NODEF}{$REGION 'Операции с NULL'}{$ENDIF}
+{$REGION 'Операции с NULL'}
     function GetNullPtr(ABuffer: PByte): PWordBool;
     function IsNull(ABuffer: PByte): Boolean;
     procedure SetNull(ABuffer: PByte; ANullFlag: Boolean);
-{$IFDEF NODEF}{$ENDREGION}{$ENDIF}
+{$ENDREGION}
   public
     function IsText(AAccessBlob: Boolean = False): Boolean;
   public
@@ -91,10 +93,10 @@ type
     property MaxCharLength  : Integer read GetMaxCharLength;
     property SQLTypeAsString: string read GetSQLTypeAsString;
   end;
-{$IFDEF NODEF}{$ENDREGION}{$ENDIF}
+{$ENDREGION}
 
 type
-{$IFDEF NODEF}{$REGION 'TMessageMetadata - Метаданные'}{$ENDIF}
+{$REGION 'TMessageMetadata - Метаданные'}
   /// <summary>
   /// Метаданные
   /// </summary>
@@ -109,7 +111,7 @@ type
     procedure Fill(AStatus: IStatus; AMetadata: IMessageMetadata);
     property MessageLength: Cardinal read FMessageLength;
   end;
-{$IFDEF NODEF}{$ENDREGION}{$ENDIF}
+{$ENDREGION}
 
 type
   TRoutineMetadata = class sealed
@@ -382,10 +384,10 @@ begin
   inherited Create;
   FStatus := AStatus;
 
-  FPackage := string(AnsiStrings.StrPas(ARoutineMetaData.getPackage(FStatus)));
-  FName := string(AnsiStrings.StrPas(ARoutineMetaData.getName(FStatus)));
-  FEntryPoint := string(AnsiStrings.StrPas(ARoutineMetaData.getEntryPoint(FStatus)));
-  FBody := string(AnsiStrings.StrPas(ARoutineMetaData.getBody(FStatus)));
+  FPackage := string({$IFNDEF FPC}AnsiStrings.{$ENDIF}StrPas(ARoutineMetaData.getPackage(FStatus)));
+  FName := string({$IFNDEF FPC}AnsiStrings.{$ENDIF}StrPas(ARoutineMetaData.getName(FStatus)));
+  FEntryPoint := string({$IFNDEF FPC}AnsiStrings.{$ENDIF}StrPas(ARoutineMetaData.getEntryPoint(FStatus)));
+  FBody := string({$IFNDEF FPC}AnsiStrings.{$ENDIF}StrPas(ARoutineMetaData.getBody(FStatus)));
   FInput := TMessageMetadata.Create(FStatus, ARoutineMetaData.getInputMetadata(FStatus), True);
   FOutput := TMessageMetadata.Create(FStatus, ARoutineMetaData.getOutputMetadata(FStatus), True);
   // FTrigger      := TMessageMetadata.Create(FStatus, ARoutineMetaData.getTriggerMetadata(FStatus), True);
