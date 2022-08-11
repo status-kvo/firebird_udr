@@ -1,6 +1,6 @@
 ﻿unit firebird_factories_base;
 
-{$INCLUDE .\sources\general.inc}
+{$I general.inc}
 
 interface
 

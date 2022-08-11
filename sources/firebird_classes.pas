@@ -1,6 +1,6 @@
 ﻿unit firebird_classes;
 
-{$I .\sources\general.inc}
+{$I general.inc}
 
 interface
 
@@ -237,13 +237,13 @@ end;
 { TObjectCreator<TInstance> }
 
 function TObjectCreator<TInstance>.doExecute(const AParams: RExecuteParams): Boolean;
-var
-  Instance: TInstance;
-  Obj     : TObject absolute Instance;
+ var
+  LNew: TInstance;
+  LObj: TObject absolute LNew;
 begin
-  Instance := TInstance.Create;
-  RLibraryHeapManager.Add(Obj, Self);
-  AParams.FOutput.MessageData[0].AsObject := Obj;
+  LNew := TInstance.Create;
+  RLibraryHeapManager.Add(LObj, Self);
+  AParams.FOutput.MessageData[0].AsObject := LObj;
   Result := True
 end;
 

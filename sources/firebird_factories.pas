@@ -1,6 +1,6 @@
 ﻿unit firebird_factories;
 
-{$INCLUDE .\sources\general.inc}
+{$I general.inc}
 
 interface
 
@@ -244,6 +244,8 @@ begin
     Result := ESqlType.SQL_TIMESTAMP
   else if AType = TypeInfo(TTime) then
     Result := ESqlType.SQL_TIME
+  else if AType = TypeInfo(TTimeStamp) then
+    Result := ESqlType.SQL_TIMESTAMP
   else if AType = TypeInfo(IBlob) then
     Result := ESqlType.SQL_QUAD
   else if PTypeInfo(AType).Kind = tkClass then

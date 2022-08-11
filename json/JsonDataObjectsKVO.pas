@@ -880,7 +880,7 @@ var
 const
   cJSONFormatSettings: TFormatSettings = (DateSeparator: '.'; ShortDateFormat: 'dd.MM.yyyy');
 
-// MBulak
+// kvo
 type
   HJsonDataValueHelper = record helper for TJsonDataValueHelper
    private
@@ -5407,7 +5407,7 @@ begin
     // end;
 
 
-    // MBulak
+    // kvo
     LIsQuoted := False;
     while True do
     begin
@@ -5431,7 +5431,7 @@ begin
         begin
           if Obj <> nil then
           begin
-            // MBulak
+            // kvo
             System.SetString(S, F, EndF - F);
             S := S.DeQuotedString('"');
             Idx := Obj.IndexOf(S);
@@ -5453,7 +5453,7 @@ begin
           if Obj = nil then
             PathNullError(PChar(Pointer(NamePath)), LastEndF);
 
-          // MBulak
+          // kvo
           System.SetString(S, F, EndF - F);
           S := S.DeQuotedString('"');
           Idx := Obj.IndexOf(S);
@@ -5469,7 +5469,7 @@ begin
           if Obj = nil then
             PathNullError(PChar(Pointer(NamePath)), LastEndF);
 
-          // MBulak
+          // kvo
           System.SetString(S, F, EndF - F);
           S := S.DeQuotedString('"');
           Idx := Obj.IndexOf(S);

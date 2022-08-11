@@ -1,6 +1,6 @@
 ﻿unit json_firebird_classes;
 
-{$I .\sources\general.inc}
+{$I general.inc}
 
 interface
 
@@ -21,7 +21,6 @@ uses
   Variants,
   Classes,
   Generics.Collections,
-  DateUtils,
   JsonDataObjectsKVO,
   firebird_variables,
   firebird_types,
@@ -205,62 +204,62 @@ type
   protected
     class procedure doSetup(const ASetup: RSetupParams); override;
   protected
-    FValue: TMessagesData.RMessage;
-    procedure UdrToValue(const AParams: RExecuteParams; AValue: PJsonDataValue = nil); virtual; abstract;
+    FValueUdr: TMessagesData.RMessage;
+    procedure UdrToValue(const AParams: RExecuteParams; AValueJson: PJsonDataValue); virtual; abstract;
   end;
 
 type
   TInJsonPutComplexItem<TPath> = class sealed(TInJsonPutCustomItemOutBool<TPath, TJsonBaseObject>)
   protected
-    procedure UdrToValue(const AParams: RExecuteParams; AValue: PJsonDataValue = nil); override;
+    procedure UdrToValue(const AParams: RExecuteParams; AValueJson: PJsonDataValue); override;
   end;
 
 type
   TInJsonPutBlobItem<TPath> = class sealed(TInJsonPutCustomItemOutBool<TPath, IBlob>)
   protected
-    procedure UdrToValue(const AParams: RExecuteParams; AValue: PJsonDataValue = nil); override;
+    procedure UdrToValue(const AParams: RExecuteParams; AValueJson: PJsonDataValue); override;
   end;
 
 type
   TInJsonPutInt16Item<TPath> = class sealed(TInJsonPutCustomItemOutBool<TPath, Int16>)
   protected
-    procedure UdrToValue(const AParams: RExecuteParams; AValue: PJsonDataValue = nil); override;
+    procedure UdrToValue(const AParams: RExecuteParams; AValueJson: PJsonDataValue); override;
   end;
 
 type
   TInJsonPutInt32Item<TPath> = class sealed(TInJsonPutCustomItemOutBool<TPath, Int32>)
   protected
-    procedure UdrToValue(const AParams: RExecuteParams; AValue: PJsonDataValue = nil); override;
+    procedure UdrToValue(const AParams: RExecuteParams; AValueJson: PJsonDataValue); override;
   end;
 
 type
   TInJsonPutInt64Item<TPath> = class sealed(TInJsonPutCustomItemOutBool<TPath, Int64>)
   protected
-    procedure UdrToValue(const AParams: RExecuteParams; AValue: PJsonDataValue = nil); override;
+    procedure UdrToValue(const AParams: RExecuteParams; AValueJson: PJsonDataValue); override;
   end;
 
 type
   TInJsonPutSingleItem<TPath> = class sealed(TInJsonPutCustomItemOutBool<TPath, Single>)
   protected
-    procedure UdrToValue(const AParams: RExecuteParams; AValue: PJsonDataValue = nil); override;
+    procedure UdrToValue(const AParams: RExecuteParams; AValueJson: PJsonDataValue); override;
   end;
 
 type
   TInJsonPutDoubleItem<TPath> = class sealed(TInJsonPutCustomItemOutBool<TPath, Double>)
   protected
-    procedure UdrToValue(const AParams: RExecuteParams; AValue: PJsonDataValue = nil); override;
+    procedure UdrToValue(const AParams: RExecuteParams; AValueJson: PJsonDataValue); override;
   end;
 
 type
   TInJsonPutStringItem<TPath> = class sealed(TInJsonPutCustomItemOutBool<TPath, string>)
   protected
-    procedure UdrToValue(const AParams: RExecuteParams; AValue: PJsonDataValue = nil); override;
+    procedure UdrToValue(const AParams: RExecuteParams; AValueJson: PJsonDataValue); override;
   end;
 
 type
-  TInJsonPutDateItem<TPath> = class sealed(TInJsonPutCustomItemOutBool<TPath, TDate>)
+  TInJsonPutDateKindItem<TPath, TDateKind> = class sealed(TInJsonPutCustomItemOutBool<TPath, TDateKind>)
   protected
-    procedure UdrToValue(const AParams: RExecuteParams; AValue: PJsonDataValue = nil); override;
+    procedure UdrToValue(const AParams: RExecuteParams; AValueJson: PJsonDataValue); override;
   end;
 
   { TUdrRegisterJson }
@@ -292,7 +291,10 @@ begin
   AUdrPlugin.registerFunction(AStatus, 'JsonObjectGetFloat', TInJsonObjectGetSimpleItem<Single>.Factory);
   AUdrPlugin.registerFunction(AStatus, 'JsonObjectGetDouble', TInJsonObjectGetSimpleItem<Double>.Factory);
   AUdrPlugin.registerFunction(AStatus, 'JsonObjectGetBool', TInJsonObjectGetSimpleItem<Boolean>.Factory);
-  AUdrPlugin.registerFunction(AStatus, 'JsonObjectGetDate', TInJsonObjectGetDateItem<TDate>.Factory);
+  AUdrPlugin.registerFunction(AStatus, 'JsonObjectGetTime', TInJsonObjectGetSimpleItem<TTime>.Factory);
+  AUdrPlugin.registerFunction(AStatus, 'JsonObjectGetDate', TInJsonObjectGetSimpleItem<TDate>.Factory);
+  AUdrPlugin.registerFunction(AStatus, 'JsonObjectGetDateTime', TInJsonObjectGetSimpleItem<TDateTime>.Factory);
+  AUdrPlugin.registerFunction(AStatus, 'JsonObjectGetTimeStamp', TInJsonObjectGetSimpleItem<TTimeStamp>.Factory);
 
   AUdrPlugin.registerFunction(AStatus, 'JsonObjectPutBlob', TInJsonPutBlobItem<string>.Factory);
   AUdrPlugin.registerFunction(AStatus, 'JsonObjectPutString', TInJsonPutStringItem<string>.Factory);
@@ -301,7 +303,10 @@ begin
   AUdrPlugin.registerFunction(AStatus, 'JsonObjectPutInt64', TInJsonPutInt64Item<string>.Factory);
   AUdrPlugin.registerFunction(AStatus, 'JsonObjectPutFloat', TInJsonPutSingleItem<string>.Factory);
   AUdrPlugin.registerFunction(AStatus, 'JsonObjectPutDouble', TInJsonPutDoubleItem<string>.Factory);
-  AUdrPlugin.registerFunction(AStatus, 'JsonObjectPutDate', TInJsonPutDateItem<string>.Factory);
+  AUdrPlugin.registerFunction(AStatus, 'JsonObjectPutTime', TInJsonPutDateKindItem<string, TTime>.Factory);
+  AUdrPlugin.registerFunction(AStatus, 'JsonObjectPutDate', TInJsonPutDateKindItem<string, TDate>.Factory);
+  AUdrPlugin.registerFunction(AStatus, 'JsonObjectPutDateTime', TInJsonPutDateKindItem<string, TDateTime>.Factory);
+  AUdrPlugin.registerFunction(AStatus, 'JsonObjectPutTimeStamp', TInJsonPutDateKindItem<string, TTimeStamp>.Factory);
   AUdrPlugin.registerFunction(AStatus, 'JsonObjectPutComplex', TInJsonPutComplexItem<string>.Factory);
 
   AUdrPlugin.registerFunction(AStatus, 'JsonArrayCreate', TObjectCreator<TJsonArray>.Factory);
@@ -317,7 +322,10 @@ begin
   AUdrPlugin.registerFunction(AStatus, 'JsonArrayGetFloat', TInJsonArrayGetSimpleItem<Single>.Factory);
   AUdrPlugin.registerFunction(AStatus, 'JsonArrayGetDouble', TInJsonArrayGetSimpleItem<Double>.Factory);
   AUdrPlugin.registerFunction(AStatus, 'JsonArrayGetBool', TInJsonArrayGetSimpleItem<Boolean>.Factory);
+  AUdrPlugin.registerFunction(AStatus, 'JsonArrayGetTime', TInJsonArrayGetSimpleItem<TTime>.Factory);
   AUdrPlugin.registerFunction(AStatus, 'JsonArrayGetDate', TInJsonArrayGetSimpleItem<TDate>.Factory);
+  AUdrPlugin.registerFunction(AStatus, 'JsonArrayGetDateTime', TInJsonArrayGetSimpleItem<TDateTime>.Factory);
+  AUdrPlugin.registerFunction(AStatus, 'JsonArrayGetTimeStamp', TInJsonArrayGetSimpleItem<TTimeStamp>.Factory);
 
   AUdrPlugin.registerFunction(AStatus, 'JsonArrayPutBlob', TInJsonPutBlobItem<Int32>.Factory);
   AUdrPlugin.registerFunction(AStatus, 'JsonArrayPutString', TInJsonPutStringItem<Int32>.Factory);
@@ -326,7 +334,10 @@ begin
   AUdrPlugin.registerFunction(AStatus, 'JsonArrayPutInt64', TInJsonPutInt64Item<Int32>.Factory);
   AUdrPlugin.registerFunction(AStatus, 'JsonArrayPutFloat', TInJsonPutSingleItem<Int32>.Factory);
   AUdrPlugin.registerFunction(AStatus, 'JsonArrayPutDouble', TInJsonPutDoubleItem<Int32>.Factory);
-  AUdrPlugin.registerFunction(AStatus, 'JsonArrayPutDate', TInJsonPutDateItem<Int32>.Factory);
+  AUdrPlugin.registerFunction(AStatus, 'JsonArrayPutTime', TInJsonPutDateKindItem<Int32, TTime>.Factory);
+  AUdrPlugin.registerFunction(AStatus, 'JsonArrayPutDate', TInJsonPutDateKindItem<Int32, TDate>.Factory);
+  AUdrPlugin.registerFunction(AStatus, 'JsonArrayPutDateTime', TInJsonPutDateKindItem<Int32, TDateTime>.Factory);
+  AUdrPlugin.registerFunction(AStatus, 'JsonArrayPutTimeStamp', TInJsonPutDateKindItem<Int32, TTimeStamp>.Factory);
   AUdrPlugin.registerFunction(AStatus, 'JsonArrayPutComplex', TInJsonPutComplexItem<Int32>.Factory);
 end;
 
@@ -449,7 +460,8 @@ begin
   LStream := nil;
   try
     LStream := TStreamBlob.CreateWrite(ISC_QUADPtr(FOutput.GetData), AParams.FStatus, AParams.FInput.Context);
-    FInstanceIn.LoadFromStream(LStream, nil, FIn1.AsBoolean);
+    FInstanceIn.SaveToStream(LStream, FIn1.AsBoolean);
+    FOutput.SetNull(False)
   finally
     LStream.Free
   end;
@@ -471,7 +483,7 @@ begin
     RaiseForArray(LIndex, TJsonArray(FInstanceIn).Count);
 
   LValue := TJsonArray(FInstanceIn).Items[LIndex];
-  if (LValue = nil) or (LValue.IsNull) then
+  if (LValue <> nil) and (not LValue.IsNull) then
     Result := ValueToUdr(LValue, AParams);
 
   if FRemove then
@@ -625,7 +637,20 @@ end;
 
 function TInJsonGetSimpleItemAndDefault<TPath, TOut>.ValueToUdr(AValue: PJsonDataValue; const AParams: RExecuteParams): Boolean;
 begin
-  FOutput.AsString := aValue.Value;
+  case aValue.Typ of
+    jdtBool:
+      FOutput.AsBoolean := AValue.BoolValue;
+    jdtInt, jdtLong:
+      FOutput.AsBigint := AValue.LongValue;
+    jdtULong:
+      FOutput.AsBigint := Int64(AValue.LongValue);
+    jdtFloat:
+      FOutput.AsDouble := AValue.FloatValue;
+    jdtDateTime, jdtUtcDateTime:
+      FOutput.AsDateTime := AValue.DateTimeValue;
+   else
+    FOutput.AsString := aValue.Value;
+  end;
   Result := True
 end;
 
@@ -638,7 +663,20 @@ end;
 
 function TInJsonGetSimpleItem<TPath, TOut>.ValueToUdr(AValue: PJsonDataValue; const AParams: RExecuteParams): Boolean;
 begin
-  FOutput.AsString := aValue.Value;
+  case aValue.Typ of
+    jdtBool:
+      FOutput.AsBoolean := AValue.BoolValue;
+    jdtInt, jdtLong:
+      FOutput.AsBigint := AValue.LongValue;
+    jdtULong:
+      FOutput.AsBigint := Int64(AValue.LongValue);
+    jdtFloat:
+      FOutput.AsDouble := AValue.FloatValue;
+    jdtDateTime, jdtUtcDateTime:
+      FOutput.AsDateTime := AValue.DateTimeValue;
+   else
+    FOutput.AsString := aValue.Value;
+  end;
   Result := True
 end;
 
@@ -689,9 +727,12 @@ begin
   LIndex := FIn1.AsInteger;
 
   if LIndex = -1 then
+  begin
     TJsonArray(FInstanceIn).Add(null);
+    LIndex := Pred(TJsonArray(FInstanceIn).Count);
+  end;
 
-  if FValue.isNull then
+  if FValueUdr.isNull then
     TJsonArray(FInstanceIn).Items[LIndex].ObjectValue := nil
   else
     UdrToValue(AParams, TJsonArray(FInstanceIn).Items[LIndex]);
@@ -708,14 +749,14 @@ begin
   LHelper := TJsonObject(FInstanceIn).Path[LPath];
   LHelper.ObjectValue := nil;
 
-  if not FValue.isNull then
+  if not FValueUdr.isNull then
     UdrToValue(AParams, LHelper.Intern);
 end;
 
 function TInJsonPutCustomItemOutBool<TPath, TValue>.doExecute(const AParams: RExecuteParams): Boolean;
 begin
   inherited;
-  FValue := AParams.FInput.MessageData[2];
+  FValueUdr := AParams.FInput.MessageData[2];
 
   if FInstanceIn is TJsonArray then
     InternalExecuteArray(AParams)
@@ -733,68 +774,72 @@ end;
 
 { TInJsonPutComplexItem<TPath> }
 
-procedure TInJsonPutComplexItem<TPath>.UdrToValue(const AParams: RExecuteParams; AValue: PJsonDataValue);
+procedure TInJsonPutComplexItem<TPath>.UdrToValue(const AParams: RExecuteParams; AValueJson: PJsonDataValue);
 begin
-  RLibraryHeapManager.Remove(FValue.AsObject)
+  if FValueUdr.getObject is TJsonArray then
+    AValueJson.ArrayValue := TJsonArray(FValueUdr.getObject)
+  else
+    AValueJson.ObjectValue := TJsonObject(FValueUdr.getObject);
+  RLibraryHeapManager.Remove(FValueUdr.AsObject)
 end;
 
 { TInJsonPutBlobItem<TPath> }
 
-procedure TInJsonPutBlobItem<TPath>.UdrToValue(const AParams: RExecuteParams; AValue: PJsonDataValue);
+procedure TInJsonPutBlobItem<TPath>.UdrToValue(const AParams: RExecuteParams; AValueJson: PJsonDataValue);
  var
   LBuffer: TBytes;
 begin
-  LBuffer := TStreamBlob.MessageToBytes(FValue, AParams.FStatus, AParams.FInput.Context);
-  AValue.Value := TEncoding.UTF8.GetString(LBuffer)
+  LBuffer := TStreamBlob.MessageToBytes(FValueUdr, AParams.FStatus, AParams.FInput.Context);
+  AValueJson.Value := TEncoding.UTF8.GetString(LBuffer)
 end;
 
 { TInJsonPutInt16Item<TPath> }
 
-procedure TInJsonPutInt16Item<TPath>.UdrToValue(const AParams: RExecuteParams; AValue: PJsonDataValue);
+procedure TInJsonPutInt16Item<TPath>.UdrToValue(const AParams: RExecuteParams; AValueJson: PJsonDataValue);
 begin
-  AValue.IntValue := FValue.AsSmallint
+  AValueJson.BoolValue := FValueUdr.AsBoolean
 end;
 
 { TInJsonPutInt32Item<TPath> }
 
-procedure TInJsonPutInt32Item<TPath>.UdrToValue(const AParams: RExecuteParams; AValue: PJsonDataValue);
+procedure TInJsonPutInt32Item<TPath>.UdrToValue(const AParams: RExecuteParams; AValueJson: PJsonDataValue);
 begin
-  AValue.IntValue := FValue.AsInteger
+  AValueJson.IntValue := FValueUdr.AsInteger
 end;
 
 { TInJsonPutInt64Item<TPath> }
 
-procedure TInJsonPutInt64Item<TPath>.UdrToValue(const AParams: RExecuteParams; AValue: PJsonDataValue);
+procedure TInJsonPutInt64Item<TPath>.UdrToValue(const AParams: RExecuteParams; AValueJson: PJsonDataValue);
 begin
-  AValue.LongValue := FValue.AsBigint
+  AValueJson.LongValue := FValueUdr.AsBigint
 end;
 
 { TInJsonPutSingleItem<TPath> }
 
-procedure TInJsonPutSingleItem<TPath>.UdrToValue(const AParams: RExecuteParams; AValue: PJsonDataValue);
+procedure TInJsonPutSingleItem<TPath>.UdrToValue(const AParams: RExecuteParams; AValueJson: PJsonDataValue);
 begin
-  AValue.FloatValue := FValue.AsFloat
+  AValueJson.FloatValue := FValueUdr.AsFloat
 end;
 
 { TInJsonPutDoubleItem<TPath> }
 
-procedure TInJsonPutDoubleItem<TPath>.UdrToValue(const AParams: RExecuteParams; AValue: PJsonDataValue);
+procedure TInJsonPutDoubleItem<TPath>.UdrToValue(const AParams: RExecuteParams; AValueJson: PJsonDataValue);
 begin
-  AValue.FloatValue := FValue.AsDouble
+  AValueJson.FloatValue := FValueUdr.AsDouble
 end;
 
 { TInJsonPutStringItem<TPath> }
 
-procedure TInJsonPutStringItem<TPath>.UdrToValue(const AParams: RExecuteParams; AValue: PJsonDataValue);
+procedure TInJsonPutStringItem<TPath>.UdrToValue(const AParams: RExecuteParams; AValueJson: PJsonDataValue);
 begin
-  AValue.Value := FValue.AsString
+  AValueJson.Value := FValueUdr.AsString
 end;
 
-{ TInJsonPutDateItem<TPath> }
+{ TInJsonPutDateKindItem<TPath, TDateKind> }
 
-procedure TInJsonPutDateItem<TPath>.UdrToValue(const AParams: RExecuteParams; AValue: PJsonDataValue);
+procedure TInJsonPutDateKindItem<TPath, TDateKind>.UdrToValue(const AParams: RExecuteParams; AValueJson: PJsonDataValue);
 begin
-  AValue.DateTimeValue := FValue.AsDate
+  AValueJson.DateTimeValue := FValueUdr.AsDateTime
 end;
 
 end.

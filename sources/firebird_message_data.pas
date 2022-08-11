@@ -1,6 +1,6 @@
 ﻿unit firebird_message_data;
 
-{$INCLUDE .\sources\general.inc}
+{$I general.inc}
 
 interface
 
@@ -49,33 +49,39 @@ type
     public
       function getBoolean: Boolean;
       procedure setBoolean(const AValue: Boolean);
+    public
       function getSmallint: Smallint;
       procedure setSmallint(const AValue: Smallint);
+    public
       function getInteger: Integer;
       procedure setInteger(const AValue: Integer);
+    public
       function getBigint: Int64;
       procedure setBigint(const AValue: Int64);
+    public
       function getFloat: Single;
       procedure setFloat(const AValue: Single);
+    public
       function getDouble: Double;
       procedure setDouble(const AValue: Double);
-      function getIscDate: ISC_DATE;
-      procedure setIscDate(const AValue: ISC_DATE);
-      function getIscTime: ISC_TIME;
-      procedure setIscTime(const AValue: ISC_TIME);
-      function getIscTimestamp: ISC_TIMESTAMP;
-      procedure setIscTimestamp(const AValue: ISC_TIMESTAMP);
+    public
       function getDate: TDate;
       procedure setDate(const AValue: TDate);
+    public
       function getTime: TTime;
       procedure setTime(const AValue: TTime);
+    public
       function getTimestamp: TTimestamp;
       procedure setTimestamp(const AValue: TTimestamp);
+    public
       function getDateTime: TDateTime;
       procedure setDateTime(const AValue: TDateTime);
+    public
       function getString: string;
       procedure setString(const AValue: string);
+    public
       function getVariant: variant;
+    public
       function getObject: TObject;
       procedure setObject(const AValue: TObject);
     public
@@ -89,13 +95,12 @@ type
       property AsBigint      : Int64 read getBigint write setBigint;
       property AsFloat       : Single read getFloat write setFloat;
       property AsDouble      : Double read getDouble write setDouble;
-      property AsIscDate     : ISC_DATE read getIscDate write setIscDate;
-      property AsIscTime     : ISC_TIME read getIscTime write setIscTime;
-      property AsIscTimestamp: ISC_TIMESTAMP read getIscTimestamp write setIscTimestamp;
+
       property AsDate        : TDate read getDate write setDate;
       property AsTime        : TTime read getTime write setTime;
       property AsTimestamp   : TTimestamp read getTimestamp write setTimestamp;
       property AsDateTime    : TDateTime read getDateTime write setDateTime;
+
       property AsString      : string read getString write setString;
       property AsVariant     : variant read getVariant;
       property AsObject      : TObject read getObject write setObject;
@@ -225,7 +230,7 @@ var
   tmpFractions: Cardinal;
 begin
   FbUtil.DecodeDate(AValue.date, @tmpYear, @tmpMonth, @tmpDay);
-  FbUtil.decodeTime(AValue.time, @tmpHour, @tmpMinutes, @tmpSeconds, @tmpFractions);
+  FbUtil.DecodeTime(AValue.time, @tmpHour, @tmpMinutes, @tmpSeconds, @tmpFractions);
   Result := EncodeDateTime(tmpYear, tmpMonth, tmpDay, tmpHour, tmpMinutes, tmpSeconds, tmpFractions div 10);
 end;
 
@@ -328,14 +333,33 @@ begin
   end
 end;
 
+function TMessagesData.RMessage.getTime: TTime;
+begin
+  Result := TTime(AsDateTime)
+end;
+
+function TMessagesData.RMessage.getTimestamp: TTimestamp;
+begin
+  Result := DateTimeToTimeStamp(AsDateTime)
+end;
+
 function TMessagesData.RMessage.getDate: TDate;
 begin
-  Result := FParent.IscDateToDate(getIscDate);
+  Result := TDate(AsDateTime)
 end;
 
 function TMessagesData.RMessage.getDateTime: TDateTime;
 begin
-  Result := FParent.IscTimestampToDateTime(getIscTimestamp);
+  case FMetadata.SQLTypeEnum of
+    SQL_TIME:
+      Result := TDateTime(FParent.IscTimeToTime(PISC_TIME(FBuffer)^));
+    SQL_DATE:
+      Result := TDateTime(FParent.IscDateToDate(PISC_DATE(FBuffer)^));
+    SQL_TIMESTAMP:
+      Result := FParent.IscTimestampToDateTime(PISC_TIMESTAMP(FBuffer)^);
+   else
+    raise Exception.CreateFmt(rsErrorCanNotConvertTo, [FMetadata.SQLTypeAsString, rsDate]);
+  end;
 end;
 
 function TMessagesData.RMessage.getDouble: Double;
@@ -415,35 +439,17 @@ begin
   end;
 end;
 
-function TMessagesData.RMessage.getIscDate: ISC_DATE;
-begin
-  case FMetadata.SQLTypeEnum of
-    SQL_DATE:
-      Result := PISC_DATE(FBuffer)^;
-
-    SQL_TIMESTAMP:
-      Result := getIscTimestamp.date;
-
-  else
-    raise Exception.CreateFmt(rsErrorCanNotConvertTo, [FMetadata.SQLTypeAsString, rsDate]);
-  end;
-end;
-
 function TMessagesData.RMessage.getBigint: Int64;
 begin
   case FMetadata.SQLTypeEnum of
     SQL_SHORT:
       Result := getSmallint;
-
     SQL_LONG:
       Result := getInteger;
-
     SQL_INT64:
       Result := PInt64(FBuffer)^;
-
     SQL_TEXT, SQL_VARYING:
       Result := Int64.Parse(getString);
-
   else
     raise Exception.CreateFmt(rsErrorCanNotConvertTo, [FMetadata.SQLTypeAsString, rsBigInt]);
   end;
@@ -454,13 +460,11 @@ begin
   case FMetadata.SQLTypeEnum of
     SQL_BOOLEAN:
       Result := PBoolean(FBuffer)^;
-
     SQL_TEXT, SQL_VARYING:
       Result := Boolean.Parse(getString);
-
     SQL_SHORT:
       Result := Boolean(getSmallint);
-  else
+   else
     raise Exception.CreateFmt(rsErrorCanNotConvertTo, [FMetadata.SQLTypeAsString, rsBoolean]);
   end;
 end;
@@ -468,48 +472,6 @@ end;
 function TMessagesData.RMessage.GetData: PByte;
 begin
   Result := FBuffer
-end;
-
-function TMessagesData.RMessage.getIscTime: ISC_TIME;
-begin
-  case FMetadata.SQLTypeEnum of
-    SQL_TIME:
-      Result := PISC_TIME(FBuffer)^;
-
-    SQL_TIMESTAMP:
-      Result := getIscTimestamp.time;
-
-  else
-    raise Exception.CreateFmt(rsErrorCanNotConvertTo, [FMetadata.SQLTypeAsString, rsTime]);
-  end;
-end;
-
-function TMessagesData.RMessage.getIscTimestamp: ISC_TIMESTAMP;
-var
-  tmpTime: ISC_TIME;
-  tmpDate: ISC_DATE;
-begin
-  case FMetadata.SQLTypeEnum of
-    SQL_TIME:
-      begin
-        tmpTime := PISC_TIME(FBuffer)^;
-        Result.date := FParent.DateToIscDate(date());
-        Result.time := tmpTime;
-      end;
-
-    SQL_DATE:
-      begin
-        tmpDate := PISC_DATE(FBuffer)^;
-        Result.date := tmpDate;
-        Result.time := 0;
-      end;
-
-    SQL_TIMESTAMP:
-      Result := PISC_TIMESTAMP(FBuffer)^;
-
-  else
-    raise Exception.CreateFmt(rsErrorCanNotConvertTo, [FMetadata.SQLTypeAsString, rsDate]);
-  end;
 end;
 
 function TMessagesData.RMessage.getObject: TObject;
@@ -580,16 +542,6 @@ begin
           SetLength(Result, DataLength);
         end;
     end;
-end;
-
-function TMessagesData.RMessage.getTime: TTime;
-begin
-  Result := FParent.IscTimeToTime(getIscTime);
-end;
-
-function TMessagesData.RMessage.getTimestamp: TTimestamp;
-begin
-  Result := FParent.IscTimestampToTimestamp(getIscTimestamp);
 end;
 
 function TMessagesData.RMessage.getVariant: variant;
@@ -674,69 +626,76 @@ procedure TMessagesData.RMessage.setBoolean(const AValue: Boolean);
 begin
   case FMetadata.SQLTypeEnum of
     SQL_BOOLEAN, SQL_SHORT:
-      begin
-        setNull(False);
-        PBoolean(FBuffer)^ := AValue;
-      end;
+      PBoolean(FBuffer)^ := AValue;
     SQL_TEXT, SQL_VARYING:
       if AValue then
         setString('True')
       else
         setString('False');
-
-  else
+   else
     raise Exception.CreateFmt(rsErrorCanNotConvertTo, [rsBoolean, FMetadata.SQLTypeAsString])
   end;
+  setNull(False);
+end;
+
+procedure TMessagesData.RMessage.setTimestamp(const AValue: TTimestamp);
+begin
+  AsDateTime := TimestampToDateTime(AValue)
+end;
+
+procedure TMessagesData.RMessage.setTime(const AValue: TTime);
+begin
+  AsDateTime := TDateTime(AValue)
 end;
 
 procedure TMessagesData.RMessage.setDate(const AValue: TDate);
 begin
-  setIscDate(FParent.DateToIscDate(AValue));
+  AsDateTime := TDateTime(AValue)
 end;
 
 procedure TMessagesData.RMessage.setDateTime(const AValue: TDateTime);
 begin
-  setIscTimestamp(FParent.DateTimeToIscTimestamp(AValue));
+  case FMetadata.SQLTypeEnum of
+    SQL_TIME:
+      PISC_TIME(FBuffer)^ := FParent.TimeToIscTime(TTime(AValue));
+    SQL_DATE:
+      PISC_DATE(FBuffer)^ := FParent.DateToIscDate(TDate(AValue));
+    SQL_TIMESTAMP:
+      PISC_TIMESTAMP(FBuffer)^ := FParent.DateTimeToIscTimestamp(TDateTime(AValue));
+   else
+    raise Exception.CreateFmt(rsErrorCanNotConvertTo, [rsTime, FMetadata.SQLTypeAsString])
+  end;
+  setNull(False);
 end;
 
 procedure TMessagesData.RMessage.setDouble(const AValue: Double);
 begin
   case FMetadata.SQLTypeEnum of
     SQL_DOUBLE, SQL_D_FLOAT:
-      begin
-        setNull(False);
-        PDouble(FBuffer)^ := AValue;
-      end;
-
+      PDouble(FBuffer)^ := AValue;
     SQL_FLOAT:
       setFloat({$IFDEF FPC}AValue{$ELSE}Single(AValue){$ENDIF});
-
     SQL_TEXT, SQL_VARYING:
       setString(AValue.ToString());
-
-  else
+   else
     raise Exception.CreateFmt(rsErrorCanNotConvertTo, [rsDouble, FMetadata.SQLTypeAsString])
   end;
+  setNull(False);
 end;
 
 procedure TMessagesData.RMessage.setFloat(const AValue: Single);
 begin
   case FMetadata.SQLTypeEnum of
     SQL_FLOAT:
-      begin
-        setNull(False);
-        PSingle(FBuffer)^ := AValue;
-      end;
-
+      PSingle(FBuffer)^ := AValue;
     SQL_DOUBLE, SQL_D_FLOAT:
       setDouble(AValue);
-
     SQL_TEXT, SQL_VARYING:
       setString(AValue.ToString())
-
-  else
+   else
     raise Exception.CreateFmt(rsErrorCanNotConvertTo, [rsFloat, FMetadata.SQLTypeAsString])
   end;
+  setNull(False);
 end;
 
 procedure TMessagesData.RMessage.setInteger(const AValue: Integer);
@@ -744,88 +703,20 @@ begin
   case FMetadata.SQLTypeEnum of
     SQL_SHORT:
       setSmallint(AValue);
-
     SQL_LONG:
-      begin
-        setNull(False);
-        PInteger(FBuffer)^ := AValue;
-      end;
-
+      PInteger(FBuffer)^ := AValue;
     SQL_INT64:
       setBigint(AValue);
-
     SQL_FLOAT:
       setFloat(AValue);
-
     SQL_DOUBLE, SQL_D_FLOAT:
       setDouble(AValue);
-
     SQL_TEXT, SQL_VARYING:
       setString(AValue.ToString())
-
-  else
+   else
     raise Exception.CreateFmt(rsErrorCanNotConvertTo, [rsInteger, FMetadata.SQLTypeAsString])
   end;
-end;
-
-procedure TMessagesData.RMessage.setIscDate(const AValue: ISC_DATE);
-var
-  tmpTimestamp: ISC_TIMESTAMP;
-begin
-  case FMetadata.SQLTypeEnum of
-    SQL_DATE:
-      begin
-        setNull(False);
-        PISC_DATE(FBuffer)^ := AValue;
-      end;
-
-    SQL_TIMESTAMP:
-      begin
-        tmpTimestamp.date := AValue;
-        tmpTimestamp.time := 0;
-        setIscTimestamp(tmpTimestamp);
-      end;
-
-  else
-    raise Exception.CreateFmt(rsErrorCanNotConvertTo, [rsDate, FMetadata.SQLTypeAsString])
-  end;
-end;
-
-procedure TMessagesData.RMessage.setIscTime(const AValue: ISC_TIME);
-var
-  tmpTimestamp: ISC_TIMESTAMP;
-begin
-  case FMetadata.SQLTypeEnum of
-    SQL_TIME:
-      begin
-        setNull(False);
-        PISC_TIME(FBuffer)^ := AValue;
-      end;
-
-    SQL_TIMESTAMP:
-      begin
-        tmpTimestamp.date := FParent.DateToIscDate(date());
-        tmpTimestamp.time := AValue;
-        setIscTimestamp(tmpTimestamp);
-      end;
-
-  else
-    raise Exception.CreateFmt(rsErrorCanNotConvertTo, [rsTime, FMetadata.SQLTypeAsString])
-  end;
-end;
-
-procedure TMessagesData.RMessage.setIscTimestamp(const AValue: ISC_TIMESTAMP);
-begin
-  case FMetadata.SQLTypeEnum of
-    SQL_TIMESTAMP:
-      begin
-        setNull(False);
-        PISC_TIMESTAMP(FBuffer)^ := AValue;
-      end;
-
-  else
-    raise Exception.CreateFmt(rsErrorCanNotConvertTo, [rsTimeStamp, FMetadata.SQLTypeAsString])
-  end;
+  setNull(False);
 end;
 
 procedure TMessagesData.RMessage.setObject(const AValue: TObject);
@@ -904,14 +795,8 @@ begin
           setDouble(ValueFloat);
         end;
 
-      SQL_TIME:
-        setTime(StrToTime(AValue));
-
-      SQL_DATE:
-        setDate(StrToDate(AValue));
-
-      SQL_TIMESTAMP:
-        setDateTime(StrToDateTime(AValue));
+      SQL_TIME, SQL_DATE, SQL_TIMESTAMP:
+        AsDateTime := StrToDateTime(AValue);
 
       SQL_VARYING:
         begin
@@ -950,16 +835,6 @@ begin
         TStreamBlob.BytesToMessage(Encoding.GetBytes(AValue), Self, Parent.Status, Parent.Context);
 
     end;
-end;
-
-procedure TMessagesData.RMessage.setTime(const AValue: TTime);
-begin
-  setIscTime(FParent.TimeToIscTime(AValue));
-end;
-
-procedure TMessagesData.RMessage.setTimestamp(const AValue: TTimestamp);
-begin
-  setIscTimestamp(FParent.TimestampToIscTimestamp(AValue));
 end;
 
 end.

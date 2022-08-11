@@ -1,6 +1,6 @@
 ﻿unit stream_firebird_classes;
 
-{$I .\sources\general.inc}
+{$I general.inc}
 
 interface
 
@@ -109,9 +109,10 @@ type
 class procedure TUdrRegisterStream.Register(AStatus: IStatus; AUdrPlugin: IUdrPlugin);
 begin
   {$IFDEF UDR_HAS_STREAM_SHARED}
-  AUdrPlugin.registerFunction(AStatus, 'StreamSharedCreate', TObjectCreator<TSharedStream>.Factory);
-  AUdrPlugin.registerFunction(AStatus, 'StreamStringCreate', TObjectCreator<TStringStream>.Factory);
+    AUdrPlugin.registerFunction(AStatus, 'StreamSharedCreate', TObjectCreator<TSharedStream>.Factory);
   {$ENDIF  UDR_HAS_STREAM_SHARED}
+
+  AUdrPlugin.registerFunction(AStatus, 'StreamStringCreate', TObjectCreator<TStringStream>.Factory);
 
   AUdrPlugin.registerFunction(AStatus, 'StreamAssign', TAssign.Factory);
 

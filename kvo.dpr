@@ -1,10 +1,12 @@
 ﻿library kvo;
 
-{$I .\sources\general.inc}
+{$I general.inc}
 
 uses
   {$IFDEF UNIX}
   cthreads,
+  {$ELSE}
+  FastMM4,
   {$ENDIF UNIX}
   library_external in 'sources\library_external.pas',
   firebird_api in 'sources\firebird_api.pas',

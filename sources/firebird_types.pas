@@ -1,6 +1,6 @@
 ﻿unit firebird_types;
 
-{$I .\sources\general.inc}
+{$I general.inc}
 
 interface
 

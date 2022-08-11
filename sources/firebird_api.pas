@@ -1,6 +1,6 @@
 ﻿unit firebird_api;
 
-{$INCLUDE .\sources\general.inc}
+{$I general.inc}
 // {$OBJECTCHECKS OFF}
 
 interface
@@ -14870,4 +14870,3 @@ IUdrTriggerFactoryImpl_vTable.Destroy;
 IUdrPluginImpl_vTable.Destroy;
 
 end.
-

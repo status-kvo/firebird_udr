@@ -5,7 +5,10 @@ UDF для Firebird 3.xx, 4.xx
 JSON support - like class structure.
 Stream support based on class
 
- Memory release control on session close(Attachment)
+Memory release control on session close(Attachment)
 
+To work with JSON, use JsonDataObjects (https://github.com/ahausladen/JsonDataObjects.git)
+To increase the speed of working with memory, a good library FastMM4-AVX (https://github.com/maximmasiutin/FastMM4-AVX.git)
 
-To work with JSON, use JsonDataObjects (https://github.com/ahausladen/JsonDataObjects.git), connected as a module
+Для работы с JSON используйте JsonDataObjects (https://github.com/ahausladen/JsonDataObjects.git)
+Для увеличения скорости работы с памятью применяется добрабонная библиотека FastMM4-AVX (https://github.com/maximmasiutin/FastMM4-AVX.git)

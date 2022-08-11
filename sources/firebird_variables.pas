@@ -1,6 +1,6 @@
 ﻿unit firebird_variables;
 
-{$INCLUDE .\sources\general.inc}
+{$I general.inc}
 
 interface
 

@@ -1,6 +1,6 @@
 ﻿unit firebird_blob;
 
-{$INCLUDE .\sources\general.inc}
+{$I general.inc}
 
 interface
 
@@ -326,29 +326,36 @@ begin
 end;
 
 function TStreamBlob.Seek(const AOffset: Int64; AOrigin: TSeekOrigin): Int64;
+ const
+  CSegmentSize : Int64 = 16384;
  var
-  lSegment: Int32;
-  lFull: Int64;
+  LSegment: Int32;
+  LFull: Int64;
 begin
   if FBlob = nil then
     raise Exception.Create(rsBlobNotCreate);
 
-  lFull := AOffset;
+  {$message 'kvo'}
+//  if AOffset = 0 then
+//    Exit;
+
+  LFull := AOffset;
   Result := AOffset;
   repeat
 
-    if lFull > Int64(Int32.MaxValue) then
-      lSegment := Int32.MaxValue
-    else if lFull < Int64(Int32.MinValue) then
-      lSegment := Int32.MinValue
-    else
-      lSegment := Int32(lFull);
+    if LFull <= 0 then
+      Exit;
 
-    FBlob.seek(FStatus, Integer(AOrigin), Integer(AOffset));
-    Dec(lFull, Int64(lSegment));
+    if LFull > CSegmentSize then
+      LSegment := Int32(CSegmentSize)
+    else
+      LSegment := Int32(LFull);
+
+    LSegment := FBlob.seek(FStatus, Int32(AOrigin), LSegment);
+    Dec(LFull, Int64(LSegment));
     AOrigin := soCurrent;
 
-  until lFull <> 0;
+  until LFull <> 0;
 end;
 
 end.
