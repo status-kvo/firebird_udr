@@ -1,6 +1,6 @@
 ﻿unit firebird_message_metadata;
 
-{$INCLUDE .\sources\general.inc}
+{$I general.inc}
 
 interface
 

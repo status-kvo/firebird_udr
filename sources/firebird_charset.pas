@@ -1,6 +1,6 @@
 ﻿unit firebird_charset;
 
-{$I .\sources\general.inc}
+{$I general.inc}
 
 interface
 

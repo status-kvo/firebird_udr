@@ -1,6 +1,6 @@
 ﻿unit stream_shared;
 
-{$I .\sources\general.inc}
+{$I general.inc}
 
 interface
 
