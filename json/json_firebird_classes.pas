@@ -356,7 +356,7 @@ begin
   else
     raise Exception.CreateFmt(rsErrorClassNotSupportFormat, [FInstanceIn.ClassName]);
 
-  RLibraryHeapManager.Add(LNew, AParams.FParent);
+  TFunction(AParams.FParent).FInstances.Add(TAdapterClass.Create(Self, LNew));
   Output := LNew;
   Result := True
 end;
@@ -400,10 +400,9 @@ begin
     raise Exception.Create(rsErrorNullOrEmpty)
   else
   begin
-    {$Message 'Проверить TSerializationText'}
     FOutput.AsObject := TJsonObject.ParseUtf8(UTF8String(LValue));
     if (FOutput.AsObject <> nil) then
-      RLibraryHeapManager.Add(FOutput.AsObject, AParams.FParent);
+      TFunction(AParams.FParent).FInstances.Add(TAdapterClass.Create(Self, FOutput.AsObject));
     Result := True
   end
 end;
@@ -420,7 +419,6 @@ begin
     raise Exception.Create(rsErrorNullOrEmpty)
   else
   begin
-    {$Message 'Проверить TSerializationBlob'}
     LStream := nil;
     try
       LStream := TStreamBlob.CreateRead(ISC_QUADPtr(FIn0.GetData), AParams.FStatus, AParams.FInput.Context);
@@ -429,7 +427,7 @@ begin
 
       FOutput.AsObject := TJsonBaseObject.ParseFromStream(LStream);
       if (FOutput.AsObject <> nil) then
-        RLibraryHeapManager.Add(FOutput.AsObject, AParams.FParent);
+        TFunction(AParams.FParent).FInstances.Add(TAdapterClass.Create(Self, FOutput.AsObject));
     finally
       LStream.Free
     end;
@@ -443,7 +441,6 @@ end;
 function TDeSerializationText.doExecute(const AParams: RExecuteParams): Boolean;
 begin
   inherited;
-  {$Message 'Проверить TDeSerializationText'}
   FOutput.AsString := FInstanceIn.ToJSON(FIn1.AsBoolean);
   Result := True;
 end;
@@ -456,7 +453,6 @@ function TDeSerializationBlob.doExecute(const AParams: RExecuteParams): Boolean;
 begin
   inherited;
 
-  {$Message 'Проверить TDeSerializationBlob'}
   LStream := nil;
   try
     LStream := TStreamBlob.CreateWrite(ISC_QUADPtr(FOutput.GetData), AParams.FStatus, AParams.FInput.Context);
@@ -775,12 +771,24 @@ end;
 { TInJsonPutComplexItem<TPath> }
 
 procedure TInJsonPutComplexItem<TPath>.UdrToValue(const AParams: RExecuteParams; AValueJson: PJsonDataValue);
+ var
+  LAdapter: TAdapterClass;
 begin
   if FValueUdr.getObject is TJsonArray then
     AValueJson.ArrayValue := TJsonArray(FValueUdr.getObject)
   else
     AValueJson.ObjectValue := TJsonObject(FValueUdr.getObject);
-  RLibraryHeapManager.Remove(FValueUdr.AsObject)
+
+  LAdapter := nil;
+  try
+    LAdapter := TAdapterClass(TFunction(AParams.FParent).FInstances.FindAdapterByClass(FValueUdr.getObject));
+    if LAdapter = nil then
+      Exit;
+
+    LAdapter.IsChildDispose := False;
+  finally
+    LAdapter.Free;
+  end;
 end;
 
 { TInJsonPutBlobItem<TPath> }
