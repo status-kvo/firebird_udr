@@ -9,12 +9,70 @@ interface
 uses
   SysUtils,
   TypInfo,
+  Generics.Collections,
   firebird_api,
   firebird_types,
   firebird_charset,
   firebird_message_metadata,
   firebird_message_data;
 {$ENDREGION}
+
+type
+  TAdapter = class;
+
+  IOwner = interface
+    procedure ChildDispose(AChild: TAdapter);
+  end;
+
+  TAdapter = class abstract
+   private
+    FOwner: IOwner;
+   protected
+    procedure DoCreate; virtual;
+   public
+    constructor Create(AOwner: IOwner);
+    destructor Destroy; override;
+  end;
+
+type
+  TListAdapter = class sealed
+   private
+    FList: TList<TAdapter>;
+   public
+    procedure Add(AAdapted: TAdapter);
+    procedure Remove(AAdapted: TAdapter);
+   public
+    function FindAdapterByClass(AChild: TObject): TAdapter;
+   public
+    constructor Create;
+    destructor Destroy; override;
+  end;
+
+type
+  TAdapter<TChild> = class abstract(TAdapter)
+   protected
+    FChild: TChild;
+   public
+    property Child: TChild read FChild;
+   public
+    constructor Create(AOwner: IOwner; AChild: TChild); reintroduce;
+  end;
+
+type
+  TAdapterInterface<TChild: IInterface> = class sealed(TAdapter<TChild>)
+  end;
+
+type
+  TAdapterClass = class sealed(TAdapter<TObject>)
+   private
+    FIsChildDispose: Boolean;
+   protected
+    procedure DoCreate; override;
+   public
+    property IsChildDispose: Boolean read FIsChildDispose write FIsChildDispose;
+   public
+    destructor Destroy; override;
+  end;
 
 type
   RExecuteParams = record
@@ -42,34 +100,40 @@ type
   end;
 
 type
-  TExternalFunctionBase = class abstract(IExternalFunctionImpl)
-  public type
+  TExternalFunctionBase = class abstract(IExternalFunctionImpl, IOwner)
+   public type
     TClass = class of TExternalFunctionBase;
-  private
+   private
     FRoutineMetadata: TRoutineMetadata;
-  protected
+   protected
+    // Interface IInterface
+    function QueryInterface(const AIID: TGUID; out AObj): HResult; stdcall;
+    function _AddRef: Integer; stdcall;
+    function _Release: Integer; stdcall;
+   protected
+    // Interface IOwner
+    procedure ChildDispose(AChild: TAdapter);
+   public
+    FInstances: TListAdapter;
+   protected
     class function TypeToSqlType(AType: Pointer): ESqlType;
     class procedure ParamSet(AStatus: IStatus; AMeta: IMetadataBuilder; AIndex: NativeInt; AType: ESqlType);
     class procedure doSetup(const ASetup: RSetupParams); virtual;
     class procedure doNewItem(AStatus: IStatus; AContext: IExternalContext; AMetadata: TRoutineMetadata); virtual;
-  public
-{$IFDEF NODEF}{$REGION 'Описание'}{$ENDIF}
+   public
     /// <summary>
     /// Вызывается при уничтожении экземпляра функции
     /// </summary>
-{$IFDEF NODEF}{$ENDREGION}{$ENDIF}
     procedure dispose; override;
-  public
-{$IFDEF NODEF}{$REGION 'Описание'}{$ENDIF}
+   public
     /// <summary>
     /// Этот метод вызывается непосредственно перед execute и сообщает <br />ядру наш запрошенный набор символов для обмена данными внутри <br />
     /// этого метода. Во время этого вызова контекст использует набор символов, <br />полученный из ExternalEngine::getCharSet. <br />
     /// @param(AStatus Статус вектор) <br />@param(AContext Контекст выполнения внешней функции) <br />@param(AName Имя набора символов) <br />
     /// @param(AName Длина имени набора символов)
     /// </summary>
-{$IFDEF NODEF}{$ENDREGION}{$ENDIF}
     procedure getCharSet(AStatus: IStatus; AContext: IExternalContext; AName: PAnsiChar; ANameSize: Cardinal); override;
-  public
+   public
     constructor Create(AParent: IUdrFunctionFactoryImpl); overload;
     constructor Create(AParent: IUdrFunctionFactoryImpl; AStatus: IStatus; AMetadata: IRoutineMetadata); overload;
     constructor Create(AParent: IUdrFunctionFactoryImpl; AStatus: IStatus; AMetadata: TRoutineMetadata); overload;
@@ -78,55 +142,60 @@ type
   end;
 
 type
-  TExternalProcedureBase = class abstract(IExternalProcedureImpl)
-  public type
+  TExternalProcedureBase = class abstract(IExternalProcedureImpl, IOwner)
+   public type
     TClass = class of TExternalProcedureBase;
-  public
-{$IFDEF NODEF}{$REGION 'Описание'}{$ENDIF}
+   protected
+    // Interface IInterface
+    function QueryInterface(const AIID: TGUID; out AObj): HResult; stdcall;
+    function _AddRef: Integer; stdcall;
+    function _Release: Integer; stdcall;
+   protected
+    // Interface IOwner
+    procedure ChildDispose(AChild: TAdapter);
+   protected
+    FInstances: TListAdapter;
+   public
     /// <summary>
     /// Вызывается при уничтожении экземпляра функции
     /// </summary>
-{$IFDEF NODEF}{$ENDREGION}{$ENDIF}
     procedure dispose; override;
-  public
-{$IFDEF NODEF}{$REGION 'Описание'}{$ENDIF}
+   public
     /// <summary>
     /// Этот метод вызывается непосредственно перед execute и сообщает <br />ядру наш запрошенный набор символов для обмена данными внутри <br />
     /// этого метода. Во время этого вызова контекст использует набор символов, <br />полученный из ExternalEngine::getCharSet. <br />
     /// @param(AStatus Статус вектор) <br />@param(AContext Контекст выполнения внешней функции) <br />@param(AName Имя набора символов) <br />
     /// @param(AName Длина имени набора символов)
     /// </summary>
-{$IFDEF NODEF}{$ENDREGION}{$ENDIF}
     procedure getCharSet(AStatus: IStatus; AContext: IExternalContext; AName: PAnsiChar; ANameSize: Cardinal); override;
-  public
+   public
     constructor Create;
     destructor Destroy; override;
   end;
 
 type
   TFactoryFunction = class(IUdrFunctionFactoryImpl)
-  protected
+   protected
     FInstanceClass: TExternalFunctionBase.TClass;
-  public
+   public
     procedure dispose; override;
-  public
+   public
     procedure setup(AStatus: IStatus; AContext: IExternalContext; AMetadata: IRoutineMetadata; AInput, AOutput: IMetadataBuilder); override;
-  public
+   public
     function newItem(AStatus: IStatus; AContext: IExternalContext; AMetadata: IRoutineMetadata): IExternalFunction; override;
-  public
+   public
     constructor Create(AInstanceClass: TExternalFunctionBase.TClass);
-    destructor Destroy; override;
   end;
 
 type
   TFunction = class abstract(TExternalFunctionBase)
-  protected
+   protected
     procedure BeforeExecute(AStatus: IStatus; AInput, AOutput: TMessagesData); virtual;
     function doExecute(const AParams: RExecuteParams): Boolean; virtual;
     procedure AfterExecute(AStatus: IStatus; AInput, AOutput: TMessagesData); virtual;
-  public
+   public
     procedure execute(AStatus: IStatus; AContext: IExternalContext; AInMsg: Pointer; AOutMsg: Pointer); override; final;
-  public
+   public
     class function Factory: TFactoryFunction; virtual;
   end;
 
@@ -158,8 +227,6 @@ type
     procedure BeforeOpen(AStatus: IStatus; AInput, AOutput: TMessagesData); virtual;
     function doOpen(AStatus: IStatus; AInput, AOutput: TMessagesData): IExternalResultSet; virtual;
     procedure AfterOpen(AStatus: IStatus; AInput, AOutput: TMessagesData); virtual;
-  public
-    destructor Destroy; override;
   end;
 
 implementation
@@ -172,7 +239,7 @@ uses
 constructor TExternalFunctionBase.Create(AParent: IUdrFunctionFactoryImpl);
 begin
   inherited Create;
-  RLibraryHeapManager.Add(Self, AParent);
+  FInstances := TListAdapter.Create;
 end;
 
 constructor TExternalFunctionBase.Create(AParent: IUdrFunctionFactoryImpl; AStatus: IStatus; AMetadata: TRoutineMetadata);
@@ -186,11 +253,15 @@ begin
   Create(AParent, AStatus, TRoutineMetadata.Create(AStatus, AMetadata));
 end;
 
+procedure TExternalFunctionBase.ChildDispose(AChild: TAdapter);
+begin
+  FInstances.Remove(AChild)
+end;
+
 destructor TExternalFunctionBase.Destroy;
 begin
+  FInstances.Free;
   FRoutineMetadata.Free;
-  RLibraryHeapManager.ClearDependentFromParent(Self);
-  RLibraryHeapManager.Remove(Self);
   inherited;
 end;
 
@@ -219,6 +290,14 @@ begin
   AMeta.setType(AStatus, AIndex, Cardinal(AType) + 1);
   if AType = SQL_VARYING then
     AMeta.setCharSet(AStatus, AIndex, Cardinal(CS_UTF8));
+end;
+
+function TExternalFunctionBase.QueryInterface(const AIID: TGUID; out AObj): HResult;
+begin
+  if GetInterface(AIID, AObj) then
+    Result := 0
+  else
+    Result := E_NOINTERFACE
 end;
 
 class function TExternalFunctionBase.TypeToSqlType(AType: Pointer): ESqlType;
@@ -257,17 +336,32 @@ begin
     raise Exception.Create('Неизвестный тип данных')
 end;
 
+function TExternalFunctionBase._AddRef: Integer;
+begin
+  Result := -1
+end;
+
+function TExternalFunctionBase._Release: Integer;
+begin
+  Result := -1
+end;
+
 { TExternalProcedureBase }
+
+procedure TExternalProcedureBase.ChildDispose(AChild: TAdapter);
+begin
+  FInstances.Remove(AChild)
+end;
 
 constructor TExternalProcedureBase.Create;
 begin
   inherited Create;
-  // RLibraryHeapManager.Add(Self);
+  FInstances := TListAdapter.Create;
 end;
 
 destructor TExternalProcedureBase.Destroy;
 begin
-  // RLibraryHeapManager.Remove(Self);
+  FInstances.Free;
   inherited;
 end;
 
@@ -281,18 +375,30 @@ begin
   // virtual
 end;
 
+function TExternalProcedureBase.QueryInterface(const AIID: TGUID; out AObj): HResult;
+begin
+  if GetInterface(AIID, AObj) then
+    Result := 0
+  else
+    Result := E_NOINTERFACE
+end;
+
+function TExternalProcedureBase._AddRef: Integer;
+begin
+  Result := -1
+end;
+
+function TExternalProcedureBase._Release: Integer;
+begin
+  Result := -1
+end;
+
 { TFactoryFunction }
 
 constructor TFactoryFunction.Create(AInstanceClass: TExternalFunctionBase.TClass);
 begin
   inherited Create;
   FInstanceClass := AInstanceClass
-end;
-
-destructor TFactoryFunction.Destroy;
-begin
-  RLibraryHeapManager.ClearDependentFromParent(Self);
-  inherited;
 end;
 
 procedure TFactoryFunction.dispose;
@@ -401,7 +507,6 @@ end;
 constructor TFactoryProcedureUniversal.TProcedureAnonymous.Create(AParent: TFactoryProcedureUniversal; AStatus: IStatus; AMetadata: TRoutineMetadata);
 begin
   inherited Create;
-  // RLibraryHeapManager.Add(Self);
   FParent := AParent;
   FRoutineMetadata := AMetadata;
 end;
@@ -410,7 +515,6 @@ destructor TFactoryProcedureUniversal.TProcedureAnonymous.Destroy;
 begin
   FRoutineMetadata.Destroy;
   FParent := nil;
-  RLibraryHeapManager.ClearDependentFromParent(Self);
   inherited;
 end;
 
@@ -454,12 +558,6 @@ end;
 procedure TFactoryProcedureUniversal.BeforeOpen(AStatus: IStatus; AInput, AOutput: TMessagesData);
 begin
   // virtual
-end;
-
-destructor TFactoryProcedureUniversal.Destroy;
-begin
-  RLibraryHeapManager.ClearDependentFromParent(Self);
-  inherited;
 end;
 
 procedure TFactoryProcedureUniversal.dispose;
@@ -564,6 +662,115 @@ begin
     FOutput := nil;
     FParent := nil
   end
+end;
+
+{ TAdapter }
+
+constructor TAdapter.Create(AOwner: IOwner);
+begin
+  inherited Create;
+  FOwner := AOwner;
+end;
+
+destructor TAdapter.Destroy;
+begin
+  FOwner.ChildDispose(Self);
+  FOwner := nil;
+
+  inherited;
+end;
+
+procedure TAdapter.DoCreate;
+begin
+  Pointer(FOwner) := nil;
+end;
+
+{ TAdapter<TChild> }
+
+constructor TAdapter<TChild>.Create(AOwner: IOwner; AChild: TChild);
+begin
+  inherited Create(AOwner);
+  FChild := AChild
+end;
+
+{ TAdapterClass }
+
+destructor TAdapterClass.Destroy;
+begin
+  if FIsChildDispose then
+    FChild.Free;
+  FChild := nil;
+
+  inherited;
+end;
+
+procedure TAdapterClass.DoCreate;
+begin
+  inherited;
+
+  FIsChildDispose := True
+end;
+
+{ TListAdapter }
+
+procedure TListAdapter.Add(AAdapted: TAdapter);
+begin
+  TMonitor.Enter(Self);
+  try
+    if (FList.IndexOf(AAdapted) = -1) then
+      FList.Add(AAdapted)
+  finally
+    TMonitor.Exit(Self)
+  end;
+end;
+
+constructor TListAdapter.Create;
+begin
+  inherited Create;
+  FList := TList<TAdapter>.Create;
+end;
+
+destructor TListAdapter.Destroy;
+ var
+  LAdapter: TAdapter;
+begin
+  TMonitor.Enter(Self);
+  try
+    for LAdapter in FList do
+      LAdapter.DisposeOf;
+  finally
+    TMonitor.Exit(Self)
+  end;
+
+  FList.Free;
+
+  inherited;
+end;
+
+function TListAdapter.FindAdapterByClass(AChild: TObject): TAdapter;
+ var
+  LAdapter: TAdapter;
+begin
+  Result := nil;
+  TMonitor.Enter(Self);
+  try
+    for LAdapter in FList do
+      if LAdapter is TAdapterClass then
+        if TAdapterClass(LAdapter).Child = AChild then
+          Exit(LAdapter)
+  finally
+    TMonitor.Exit(Self)
+  end;
+end;
+
+procedure TListAdapter.Remove(AAdapted: TAdapter);
+begin
+  TMonitor.Enter(Self);
+  try
+    FList.Remove(AAdapted)
+  finally
+    TMonitor.Exit(Self)
+  end;
 end;
 
 end.

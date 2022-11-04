@@ -5,10 +5,10 @@
 uses
   {$IFDEF UNIX}
   cthreads,
-  {$ELSE}
+  {$ENDIF}
+  {$IFDEF MSWINDOWS}
   FastMM4,
-  {$ENDIF UNIX}
-  library_external in 'sources\library_external.pas',
+  {$ENDIF}
   firebird_api in 'sources\firebird_api.pas',
   firebird_variables in 'sources\firebird_variables.pas',
   firebird_types in 'sources\firebird_types.pas',

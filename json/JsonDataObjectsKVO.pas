@@ -795,7 +795,6 @@ type
     procedure SetCapacity(const Value: Integer);
     function GetPath(const NamePath: string): TJsonDataValueHelper;
     procedure SetPath(const NamePath: string; const Value: TJsonDataValueHelper);
-    function IndexOfPChar(S: PChar; Len: Integer): Integer;
     procedure PathError(P, EndP: PChar);
     procedure PathNullError(P, EndP: PChar);
     procedure PathIndexError(P, EndP: PChar; Count: Integer);
@@ -4849,26 +4848,6 @@ begin
 {$ELSE}
   Result := IndexOf(name) <> -1;
 {$ENDIF USE_LAST_NAME_STRING_LITERAL_CACHE}
-end;
-
-function TJsonObject.IndexOfPChar(S: PChar; Len: Integer): Integer;
-var
-  P: PJsonStringArray;
-begin
-  P := FNames;
-  if Len = 0 then
-  begin
-    for Result := 0 to FCount - 1 do
-      if P[Result] = '' then
-        exit;
-  end
-  else
-  begin
-    for Result := 0 to FCount - 1 do
-      if (Length(P[Result]) = Len) and CompareMem(S, Pointer(P[Result]), Len * SizeOf(Char)) then
-        exit;
-  end;
-  Result := -1;
 end;
 
 function TJsonObject.IndexOf(const Name: string): Integer;

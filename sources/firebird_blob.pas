@@ -335,10 +335,6 @@ begin
   if FBlob = nil then
     raise Exception.Create(rsBlobNotCreate);
 
-  {$message 'kvo'}
-//  if AOffset = 0 then
-//    Exit;
-
   LFull := AOffset;
   Result := AOffset;
   repeat

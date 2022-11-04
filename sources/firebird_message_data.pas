@@ -118,11 +118,9 @@ type
     function IscDateToDate(AValue: ISC_DATE): TDate;
     function IscTimeToTime(AValue: ISC_TIME): TTime;
     function IscTimestampToDateTime(AValue: ISC_TIMESTAMP): TDateTime;
-    function IscTimestampToTimestamp(AValue: ISC_TIMESTAMP): TTimestamp;
     function DateToIscDate(AValue: TDate): ISC_DATE;
     function TimeToIscTime(AValue: TTime): ISC_TIME;
     function DateTimeToIscTimestamp(AValue: TDateTime): ISC_TIMESTAMP;
-    function TimestampToIscTimestamp(AValue: TTimestamp): ISC_TIMESTAMP;
     function MessageDataGet(const AIndex: NativeUInt): RMessage;
   public
     constructor Create(AContext: IExternalContext; AMetadata: TMessageMetadata; ABuffer: PByte; AStatus: IStatus);
@@ -234,12 +232,6 @@ begin
   Result := EncodeDateTime(tmpYear, tmpMonth, tmpDay, tmpHour, tmpMinutes, tmpSeconds, tmpFractions div 10);
 end;
 
-function TMessagesData.IscTimestampToTimestamp(AValue: ISC_TIMESTAMP): TTimestamp;
-begin
-  Result.date := AValue.date;
-  Result.time := AValue.time div 10;
-end;
-
 function TMessagesData.IscTimeToTime(AValue: ISC_TIME): TTime;
 var
   tmpHour     : Cardinal;
@@ -254,12 +246,6 @@ end;
 function TMessagesData.MessageDataGet(const AIndex: NativeUInt): RMessage;
 begin
   Result := RMessage.Create(FMetadata[AIndex], GetDataByIndex(AIndex), Self);
-end;
-
-function TMessagesData.TimestampToIscTimestamp(AValue: TTimestamp): ISC_TIMESTAMP;
-begin
-  Result.date := AValue.date;
-  Result.time := AValue.time * 10;
 end;
 
 function TMessagesData.TimeToIscTime(AValue: TTime): ISC_TIME;
